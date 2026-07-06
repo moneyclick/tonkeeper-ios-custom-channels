@@ -1,0 +1,7 @@
+flows:
+  - flows/import_wallet/*
+  - flows/battery/*
+  - flows/collectibles/*
+  - flows/transactions/*
+
+testOutputDir: ../build/maestro-output

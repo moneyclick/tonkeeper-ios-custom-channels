@@ -1,62 +1,94 @@
-import UIKit
+import Combine
+import KeeperCore
 import TKUIKit
+import UIKit
 
-final class ReceiveViewController: GenericViewViewController<ReceiveView> {
-  private let viewModel: ReceiveViewModel
-  
-  init(viewModel: ReceiveViewModel) {
-    self.viewModel = viewModel
-    super.init(nibName: nil, bundle: nil)
-  }
-  
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) has not been implemented")
-  }
-  
-  override func viewDidLoad() {
-    super.viewDidLoad()
-    
-    setupBindings()
-    viewModel.viewDidLoad()
-  }
-  
-  override func viewDidLayoutSubviews() {
-    super.viewDidLayoutSubviews()
-    
-    customView.qrCodeView.setNeedsLayout()
-    customView.qrCodeView.layoutIfNeeded()
-    viewModel.generateQRCode(size: customView.qrCodeView.qrCodeImageView.frame.size)
-  }
+final class ReceiveViewController: GenericViewViewController<ReceiveUiView>, TKBottomSheetScrollContentViewController {
+    var headerConfiguration: TKBottomSheetHeaderConfiguration? {
+        return TKBottomSheetHeaderConfiguration(
+            title: .empty,
+            leftButton: .init(
+                content: .icon(.TKUIKit.Icons.Size16.chevronDown),
+                action: { [weak self] _ in
+                    self?.viewModel.close()
+                },
+                isEnabled: true
+            ),
+            rightButton: nil,
+            contentInsets: UIEdgeInsets(
+                top: 8,
+                left: 16,
+                bottom: 0,
+                right: 8
+            )
+        )
+    }
+
+    private let viewModel: ReceiveViewModelImplementation
+    private var cancellables = Set<AnyCancellable>()
+
+    var scrollView: UIScrollView {
+        customView.scrollView
+    }
+
+    var didUpdateHeight: (() -> Void)?
+    var didUpdateHeaderConfiguration: ((TKBottomSheetHeaderConfiguration?) -> Void)?
+
+    init(
+        viewModel: ReceiveViewModelImplementation
+    ) {
+        self.viewModel = viewModel
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        customView.configure(
+            network: viewModel.selectedNetwork,
+            qrCodeImage: viewModel.qrCodeImage,
+            onCopy: { [weak viewModel] in
+                viewModel?.copyAddress()
+            },
+            onShare: { [weak viewModel] in
+                viewModel?.shareSelectedAddress()
+            }
+        )
+        setupBindings()
+        viewModel.viewDidLoad()
+    }
+
+    func calculateHeight(withWidth width: CGFloat) -> CGFloat {
+        customView.calculateHeight(forWidth: width)
+    }
 }
 
 private extension ReceiveViewController {
-  func setupBindings() {
-    viewModel.didUpdateModel = { [weak customView] model in
-      customView?.configure(model: model)
+    func setupBindings() {
+        viewModel.$qrCodeImage
+            .sink { [weak self] image in
+                guard let self else { return }
+                customView.updateQRCode(
+                    image: image,
+                    network: viewModel.selectedNetwork,
+                    onCopy: { [weak viewModel] in
+                        viewModel?.copyAddress()
+                    }
+                )
+                didUpdateHeight?()
+            }
+            .store(in: &cancellables)
+
+        viewModel.didRequestShare = { [weak self] address in
+            let activityViewController = UIActivityViewController(
+                activityItems: [address.address],
+                applicationActivities: nil
+            )
+            self?.present(activityViewController, animated: true)
+        }
     }
-    
-    viewModel.didGenerateQRCode = { [weak customView] image in
-      customView?.qrCodeView.qrCodeImageView.image = image
-    }
-    
-    viewModel.didTapCopy = { address in
-      UINotificationFeedbackGenerator().notificationOccurred(.warning)
-      UIPasteboard.general.string = address
-    }
-    
-    viewModel.showToast = { configuration in
-      ToastPresenter.showToast(configuration: configuration)
-    }
-    
-    viewModel.didTapShare = { [weak self] address in
-      let activityViewController = UIActivityViewController(
-        activityItems: [address as Any],
-        applicationActivities: nil
-      )
-      self?.present(
-        activityViewController,
-        animated: true
-      )
-    }
-  }
 }

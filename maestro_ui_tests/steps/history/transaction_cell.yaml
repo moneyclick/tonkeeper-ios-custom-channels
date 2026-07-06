@@ -1,0 +1,11 @@
+appId: com.jbig.tonkeeper
+---
+- assertVisible: Sent
+- assertVisible: "\u2212\u20090.001\u2009TON"
+- runScript:
+    file: ../../scripts/utils/short_addr.js
+    env:
+      addr: ${RECIEVE_WALLET}
+- assertVisible: ${output.shortAddrRecieve}
+
+- runFlow: ../../service/history/find_last_ton_transaction.yaml

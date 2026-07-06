@@ -1,0 +1,20 @@
+appId: com.jbig.tonkeeper.dev
+---
+- tapOn: History
+- assertVisible: |-
+    Your history
+    will be shown here
+
+- tapOn: Buy Toncoin
+- assertVisible: Buy TON
+- tapOn:
+    id: ic-close-16
+- tapOn: Receive
+- runFlow: "recieve_modal/ton.yaml"
+- swipe:
+    from:
+      text: TON
+    direction: DOWN
+
+- tapOn: Collectibles
+- assertVisible: Your collectibles will be shown here

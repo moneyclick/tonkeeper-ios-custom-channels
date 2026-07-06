@@ -1,165 +1,200 @@
-import Foundation
-import TKUIKit
-import TKCore
-import UIKit
+import Combine
 import KeeperCore
+import TKCore
 import TKLocalize
-import TonSwift
+import TKUIKit
+import UIKit
 
-protocol ReceiveModuleOutput: AnyObject {
-  
+public protocol ReceiveModuleOutput: AnyObject {
+    var didRequestClose: (() -> Void)? { get set }
 }
 
-protocol ReceiveViewModel: AnyObject {
-  var didUpdateModel: ((ReceiveView.Model) -> Void)? { get set }
-  var didGenerateQRCode: ((UIImage?) -> Void)? { get set }
-  var didTapShare: ((String?) -> Void)? { get set }
-  var didTapCopy: ((String?) -> Void)? { get set }
-  
-  var showToast: ((ToastPresenter.Configuration) -> Void)? { get set }
-  
-  func viewDidLoad()
-  func generateQRCode(size: CGSize)
-}
+public protocol ReceiveModuleInput: AnyObject {}
 
-final class ReceiveViewModelImplementation: ReceiveViewModel, ReceiveModuleOutput {
-  
-  // MARK: - ReceiveModuleOutput
-  
-  // MARK: - ReceiveViewModel
-  
-  var didUpdateModel: ((ReceiveView.Model) -> Void)?
-  var didGenerateQRCode: ((UIImage?) -> Void)?
-  var didTapShare: ((String?) -> Void)?
-  var didTapCopy: ((String?) -> Void)?
-  
-  var showToast: ((ToastPresenter.Configuration) -> Void)?
-  
-  func viewDidLoad() {
-    didUpdateModel?(createModel())
-  }
-  
-  func generateQRCode(size: CGSize) {
-    Task {
-      let qrCodeString: String = {
-        let jettonAddress: Address?
-        switch token {
-        case .ton:
-          jettonAddress = nil
-        case .jetton(let jettonItem):
-          jettonAddress = jettonItem.jettonInfo.address
-        }
-        do {
-          return try deeplinkGenerator.generateTransferDeeplink(
-            with: wallet.friendlyAddress.toString(),
-            jettonAddress: jettonAddress
-          )
-        } catch {
-          return ""
-        }
-      }()
-      let image = await qrCodeGenerator.generate(
-        string: qrCodeString,
-        size: size
-      )
-      await MainActor.run {
-        didGenerateQRCode?(image)
-      }
+struct ReceiveNetworkViewData: Identifiable {
+    let chain: MultichainChain
+    let addressTitle: String
+    let title: String
+    let address: String
+    let shortAddress: String
+    let disclaimer: String
+    let icon: UIImage
+    let primaryColor: UIColor
+    let secondaryColor: UIColor
+
+    var id: MultichainChain {
+        chain
     }
-  }
-  
-  // MARK: - Image Loading
-  
-  private let imageLoader = ImageLoader()
+}
 
-  // MARK: - Dependencies
-  
-  private let token: Token
-  private let wallet: Wallet
-  private let deeplinkGenerator: DeeplinkGenerator
-  private let qrCodeGenerator: QRCodeGenerator
-  
-  init(token: Token,
-       wallet: Wallet,
-       deeplinkGenerator: DeeplinkGenerator,
-       qrCodeGenerator: QRCodeGenerator) {
-    self.token = token
-    self.wallet = wallet
-    self.deeplinkGenerator = deeplinkGenerator
-    self.qrCodeGenerator = qrCodeGenerator
-  }
+final class ReceiveViewModelImplementation: ObservableObject, ReceiveModuleOutput, ReceiveModuleInput {
+    @Published private(set) var qrCodeImage: UIImage?
+    let selectedNetwork: ReceiveNetworkViewData
+
+    var didRequestClose: (() -> Void)?
+    var didRequestShare: ((MultichainWalletAddress) -> Void)?
+    var didRequestCopy: ((MultichainWalletAddress) -> Void)?
+
+    private let address: MultichainWalletAddress
+    private let qrCodeGenerator: QRCodeGenerator
+    private var qrCodeTask: Task<Void, Never>?
+
+    init(
+        address: MultichainWalletAddress,
+        qrCodeGenerator: QRCodeGenerator
+    ) {
+        self.address = address
+        self.qrCodeGenerator = qrCodeGenerator
+        let network = address.receiveNetworkViewData
+        selectedNetwork = network
+    }
+
+    deinit {
+        qrCodeTask?.cancel()
+    }
+
+    func viewDidLoad() {
+        regenerateQRCode()
+    }
+
+    func close() {
+        didRequestClose?()
+    }
+
+    func copyAddress() {
+        didRequestCopy?(address)
+    }
+
+    func shareSelectedAddress() {
+        didRequestShare?(address)
+    }
 }
 
 private extension ReceiveViewModelImplementation {
-  func createModel() -> ReceiveView.Model {
-    let tokenName: String
-    let descriptionTokenName: String
-    let image: ReceiveView.Model.Image
-    
-    switch token {
-    case .ton:
-      tokenName = TonInfo.name
-      descriptionTokenName = "\(TonInfo.name) \(TonInfo.symbol)"
-      image = .image(.TKCore.Icons.Size44.tonLogo)
-    case .jetton(let jettonItem):
-      tokenName = jettonItem.jettonInfo.symbol ?? jettonItem.jettonInfo.name
-      descriptionTokenName = jettonItem.jettonInfo.symbol ?? jettonItem.jettonInfo.name
-      image = .asyncImage(ImageDownloadTask(closure: { [weak self] imageView, size, cornerRadius in
-        self?.imageLoader.loadImage(url: jettonItem.jettonInfo.imageURL,
-                                    imageView: imageView,
-                                    size: size,
-                                    cornerRadius: cornerRadius)
-      }))
-    }
-    
-    let titleDescriptionModel = TKTitleDescriptionView.Model(
-      title: TKLocales.Receive.title(tokenName),
-      bottomDescription: TKLocales.Receive.description(descriptionTokenName)
-    )
-        
-    let buttonsModel = ReceiveButtonsView.Model(
-      copyButtonModel: TKUIActionButton.Model(
-        title: TKLocales.Actions.copy,
-        icon: TKUIButtonTitleIconContentView.Model.Icon(
-          icon: .TKUIKit.Icons.Size16.copy,
-          position: .left
-        )
-      ),
-      copyButtonAction: {
-        [weak self, wallet] in
-        self?.copyButtonAction(wallet: wallet)
-      },
-      shareButtonConfiguration: TKButton.Configuration(
-        content: TKButton.Configuration.Content(icon: .TKUIKit.Icons.Size16.share),
-        contentPadding: UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16),
-        padding: .zero,
-        iconTintColor: .Button.secondaryForeground,
-        backgroundColors: [.normal: .Button.secondaryBackground, .highlighted: .Button.secondaryBackgroundHighlighted],
-        cornerRadius: 24,
-        action: { [weak self, wallet] in
-          guard let address = try? wallet.friendlyAddress.toString() else { return }
-          self?.didTapShare?(address)
+    func regenerateQRCode() {
+        qrCodeTask?.cancel()
+        qrCodeImage = nil
+
+        qrCodeTask = Task { [weak self] in
+            guard let self else { return }
+            let image = await qrCodeGenerator.generate(
+                string: address.address,
+                size: Constants.qrCodeSize,
+                cgImageBacked: true
+            )
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self.qrCodeImage = image
+            }
         }
-      )
-    )
-    
-    let receiveModel = ReceiveView.Model(
-      titleDescriptionModel: titleDescriptionModel,
-      buttonsModel: buttonsModel,
-      address: try? wallet.friendlyAddress.toString(),
-      addressButtonAction: { [weak self, wallet] in
-        self?.copyButtonAction(wallet: wallet)
-      },
-      image: image,
-      tag: wallet.receiveTagConfiguration()
-    )
-    
-    return receiveModel
-  }
-  
-  func copyButtonAction(wallet: Wallet) {
-    guard let address = try? wallet.friendlyAddress.toString() else { return }
-    didTapCopy?(address)
-    showToast?(wallet.copyToastConfiguration())
-  }
+    }
+}
+
+private extension ReceiveViewModelImplementation {
+    enum Constants {
+        static let qrCodeSize = CGSize(width: 240, height: 240)
+    }
+}
+
+private struct ReceiveMultichainConfiguration {
+    let title: String
+    let disclaimerTitle: String
+    let icon: UIImage
+    let primaryColor: UIColor
+    let secondaryColor: UIColor
+}
+
+private extension MultichainWalletAddress {
+    var receiveNetworkViewData: ReceiveNetworkViewData {
+        let configuration = chain.receiveMultichainConfiguration
+        return ReceiveNetworkViewData(
+            chain: chain,
+            addressTitle: TKLocales.Receive.Multichain.addressTitle(configuration.disclaimerTitle),
+            title: configuration.title,
+            address: address,
+            shortAddress: address.shortReceiveAddress,
+            disclaimer: TKLocales.Receive.Multichain.disclaimer(configuration.disclaimerTitle),
+            icon: configuration.icon,
+            primaryColor: configuration.primaryColor,
+            secondaryColor: configuration.secondaryColor
+        )
+    }
+}
+
+private extension MultichainChain {
+    var receiveMultichainConfiguration: ReceiveMultichainConfiguration {
+        switch self {
+        case .ton:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Ton.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Ton.title,
+                icon: .TKUIKit.Icons.Size44.tonChain,
+                primaryColor: .Accent.blue,
+                secondaryColor: .Accent.blue.withAlphaComponent(0.16)
+            )
+        case .eth:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Ethereum.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Ethereum.title,
+                icon: .TKUIKit.Icons.Size44.ethChain,
+                primaryColor: .Accent.blue,
+                secondaryColor: .Accent.blue.withAlphaComponent(0.16)
+            )
+        case .btc:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Bitcoin.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Bitcoin.title,
+                icon: .TKUIKit.Icons.Size44.btcChain,
+                primaryColor: .Accent.orange,
+                secondaryColor: .Accent.orange.withAlphaComponent(0.16)
+            )
+        case .base:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Base.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Base.title,
+                icon: .TKUIKit.Icons.Size44.baseChain,
+                primaryColor: .Accent.blue,
+                secondaryColor: .Accent.blue.withAlphaComponent(0.16)
+            )
+        case .bsc:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Smartchain.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Smartchain.disclaimerTitle,
+                icon: .TKUIKit.Icons.Size44.bscChain,
+                primaryColor: .Accent.orange,
+                secondaryColor: .Accent.orange.withAlphaComponent(0.16)
+            )
+        case .arb:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Arbitrum.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Arbitrum.title,
+                icon: .TKUIKit.Icons.Size44.arbitrumChain,
+                primaryColor: .Accent.blue,
+                secondaryColor: .Accent.blue.withAlphaComponent(0.16)
+            )
+        case .tron:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Tron.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Tron.title,
+                icon: .TKUIKit.Icons.Size44.trxChain,
+                primaryColor: .Accent.red,
+                secondaryColor: .Accent.red.withAlphaComponent(0.16)
+            )
+        case .sol:
+            ReceiveMultichainConfiguration(
+                title: TKLocales.Receive.Multichain.Networks.Solana.title,
+                disclaimerTitle: TKLocales.Receive.Multichain.Networks.Solana.title,
+                icon: .TKUIKit.Icons.Size44.solChain,
+                primaryColor: .Accent.red,
+                secondaryColor: .Accent.red.withAlphaComponent(0.16)
+            )
+        }
+    }
+}
+
+extension String {
+    var shortReceiveAddress: String {
+        guard count > 14 else { return self }
+        return "\(prefix(4))...\(suffix(4))"
+    }
 }

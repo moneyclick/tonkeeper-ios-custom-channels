@@ -1,282 +1,412 @@
 import UIKit
 
 public final class TKBottomSheetViewController: UIViewController {
-  
-  public var didClose: ((_ interactivly: Bool) -> Void)?
-  
-  let dimmingView = TKBottomSheetDimmingView()
-  let containerView = UIView()
-  let headerView = TKBottomSheetHeaderView()
-  let contentViewController: TKBottomSheetContentViewController
-  
-  private var isDismissing = false
-  private let scrollController = TKBottomSheetScrollController()
-  
-  private lazy var tapGesture = UITapGestureRecognizer(
-    target: self,
-    action: #selector(tapGestureHandler) 
-  )
-  
-  private lazy var panGesture = UIPanGestureRecognizer(
-    target: self,
-    action: #selector(panGestureHandler(_:))
-  )
-  
-  private var headerHeight: CGFloat {
-    headerView.systemLayoutSizeFitting(CGSize(width: view.bounds.width, height: 0)).height
-  }
-  
-  private var contentMaximumHeight: CGFloat {
-    view.frame.height
-    - view.safeAreaInsets.top
-    - bottomSpacing
-    - headerHeight
-  }
-  
-  private var bottomSpacing: CGFloat {
-    view.safeAreaInsets.bottom
-  }
-
-  private var containerFrame: CGRect = .zero
-  
-  public init(contentViewController: TKBottomSheetContentViewController) {
-    self.contentViewController = contentViewController
-    super.init(nibName: nil, bundle: nil)
-  }
-  
-  required init?(coder: NSCoder) {
-    fatalError("init(coder:) has not been implemented")
-  }
-  
-  public override func viewDidLayoutSubviews() {
-    super.viewDidLayoutSubviews()
-    
-    dimmingView.frame = view.bounds
-  }
-  
-  public func present(fromViewController: UIViewController) {
-    let navigationController = TKNavigationController(rootViewController: self)
-    navigationController.configureTransparentAppearance()
-    navigationController.setNavigationBarHidden(true, animated: false)
-    navigationController.modalPresentationStyle = .overFullScreen
-    
-    fromViewController.present(navigationController, animated: false) {
-      self.setup()
-      self.performPresent()
+    private struct SheetLayout {
+        let containerFrame: CGRect
+        let headerFrame: CGRect
+        let contentFrame: CGRect
     }
-  }
-  
-  public func dismiss(completion: (() -> Void)? = nil) {
-    performDismiss(completion: { [weak self] in
-      self?.navigationController?.dismiss(animated: false, completion: completion)
-    })
-  }
+
+    public var didClose: ((_ interactivly: Bool) -> Void)?
+
+    let dimmingView = TKBottomSheetDimmingView()
+    let containerView = UIView()
+    let headerView = TKBottomSheetHeaderView()
+    let contentViewController: TKBottomSheetContentViewController
+
+    private var isDismissing = false
+    private let scrollController = TKBottomSheetScrollController()
+    private let ignoreBottomSafeArea: Bool
+    private var isPreparingInitialPresentation = false
+    private var needsDeferredContentHeightUpdate = false
+
+    private lazy var tapGesture = UITapGestureRecognizer(
+        target: self,
+        action: #selector(tapGestureHandler)
+    )
+
+    private lazy var panGesture = UIPanGestureRecognizer(
+        target: self,
+        action: #selector(panGestureHandler(_:))
+    )
+
+    private var sheetWidth: CGFloat {
+        let width = view.bounds.width
+        if width > 0, width.isFinite {
+            return width
+        }
+
+        let containerWidth = containerView.bounds.width
+        if containerWidth > 0, containerWidth.isFinite {
+            return containerWidth
+        }
+
+        return UIScreen.main.bounds.width
+    }
+
+    private var bottomSpacing: CGFloat {
+        ignoreBottomSafeArea ? 0 : view.safeAreaInsets.bottom
+    }
+
+    private var containerFrame: CGRect = .zero
+
+    public init(contentViewController: TKBottomSheetContentViewController, ignoreBottomSafeArea: Bool = false) {
+        self.contentViewController = contentViewController
+        self.ignoreBottomSafeArea = ignoreBottomSafeArea
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override public func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        dimmingView.frame = view.bounds
+    }
+
+    public func present(fromViewController: UIViewController) {
+        let navigationController = TKNavigationController(rootViewController: self)
+        navigationController.configureTransparentAppearance()
+        navigationController.setNavigationBarHidden(true, animated: false)
+        navigationController.modalPresentationStyle = .overFullScreen
+
+        fromViewController.present(navigationController, animated: false) {
+            self.setup()
+            self.performPresent()
+        }
+    }
+
+    public func dismiss(completion: (() -> Void)? = nil) {
+        performDismiss(completion: { [weak self] in
+            self?.navigationController?.dismiss(animated: false, completion: completion)
+        })
+    }
 }
 
 private extension TKBottomSheetViewController {
-  func setup() {
-    view.backgroundColor = .clear
-    
-    dimmingView.prepareForPresentationTransition()
-    
-    containerView.backgroundColor = .Background.page
-    containerView.layer.cornerRadius = 16
-    containerView.layer.masksToBounds = true
-    
-    view.addSubview(dimmingView)
-    view.addSubview(containerView)
-    
-    dimmingView.addGestureRecognizer(tapGesture)
-    containerView.addGestureRecognizer(panGesture)
-  }
-  
-  func setupContent() {
-    addChild(contentViewController)
-    containerView.addSubview(contentViewController.view)
-    contentViewController.didMove(toParent: self)
-    
-    contentViewController.didUpdateHeight = { [weak self] in
-      guard self?.isDismissing != true else { return }
-      self?.updateContentHeight()
-    }
-  }
-  
-  func setupHeader() {
-    containerView.addSubview(headerView)
-    headerView.configure(model: contentViewController.headerItem)
-    contentViewController.didUpdatePullCardHeaderItem = { [headerView] in
-      headerView.configure(model: $0)
-    }
-    
-    headerView.closeButton.addTapAction { [weak self] in
-      self?.dismiss(completion: { [weak self] in
-        self?.didClose?(true)
-      })
-    }
-  }
-  
-  func updateContentHeight() {
-    let contentHeight = calculateContentHeight()
-    let containerHeigth = contentHeight + headerHeight + bottomSpacing
-    containerFrame.size.height = containerHeigth
-    containerFrame.origin.y = view.bounds.height - containerHeigth
-    
-    contentViewController.view.frame.origin.y = headerHeight
-    contentViewController.view.frame.size.height = contentHeight
-    contentViewController.view.setNeedsLayout()
-    contentViewController.view.layoutIfNeeded()
-    
-    animateDragging {
-      self.containerView.frame = self.containerFrame
-    }
-  }
+    func setup() {
+        view.backgroundColor = .clear
 
-  func performPresent() {
-    view.setNeedsLayout()
-    view.layoutIfNeeded()
-    setupHeader()
-    setupContent()
-    containerView.frame.size.width = view.bounds.width
-    let contentHeight = calculateContentHeight()
-    
-    let containerHeigth = contentHeight + headerHeight + bottomSpacing
-    containerFrame = CGRect(x: 0, y: view.bounds.height - containerHeigth, width: view.bounds.width, height: containerHeigth)
-    
-    let headerFrame = CGRect(x: 0, y: 0, width: containerFrame.width, height: headerHeight)
-    
-    let contentFrame = CGRect(x: 0, y: headerFrame.maxY, width: containerFrame.width, height: contentHeight)
-    
-    containerView.frame = containerFrame
-    headerView.frame = headerFrame
-    contentViewController.view.frame = contentFrame
-    
-    containerView.frame.origin.y = view.bounds.height
-    
-    view.setNeedsLayout()
-    view.layoutIfNeeded()
-    
-    dimmingView.prepareForPresentationTransition()
-    
-    animateDragging {
-      self.dimmingView.performPresentationTransition()
-      self.containerView.frame.origin.y = self.view.bounds.height - self.containerView.frame.size.height
-    }
-  }
-  
-  func performDismiss(completion: (() -> Void)? = nil) {
-    isDismissing = true
-    dimmingView.prepareForDimissalTransition()
-    animateDragging {
-      self.containerView.frame.origin.y = self.view.bounds.height
-      self.dimmingView.performDismissalTransition()
-    } completion: { [weak self] _ in
-      completion?()
-      self?.isDismissing = false
-    }
-  }
-  
-  private func calculateContentHeight() -> CGFloat {
-    if let scrollableContent = contentViewController as? TKBottomSheetScrollContentViewController {
-      scrollableContent.view.frame = view.bounds
-      if scrollableContent.scrollView.contentSize.height == .zero {
-        scrollableContent.scrollView.frame = view.bounds
-        scrollableContent.scrollView.setNeedsLayout()
-        scrollableContent.scrollView.layoutIfNeeded()
-      }
+        dimmingView.prepareForPresentationTransition()
 
-      scrollController.scrollView = scrollableContent.scrollView
+        containerView.backgroundColor = .Background.page
+        containerView.layer.cornerRadius = 16
+        containerView.layer.masksToBounds = true
 
-      scrollController.didEndDragging = { [weak self] offset, _ in
-        self?.didEndDragging(offset: offset)
-      }
+        view.addSubview(dimmingView)
+        view.addSubview(containerView)
 
-      scrollController.didDrag = { [weak self] offset in
-        self?.didDrag(offset: offset)
-      }
-      
-      let contentHeight = scrollableContent.calculateHeight(withWidth: containerView.bounds.width)
-      let adjustedHeight = max(min(contentMaximumHeight, contentHeight), 1)
-      scrollableContent.scrollView.isScrollEnabled = adjustedHeight < contentHeight
+        dimmingView.addGestureRecognizer(tapGesture)
+        containerView.addGestureRecognizer(panGesture)
+    }
 
-      return adjustedHeight
-    } else {
-      let contentHeight = contentViewController.calculateHeight(withWidth: containerView.bounds.width)
-      let adjustedHeight = min(contentMaximumHeight, contentHeight)
-      return adjustedHeight
+    func setupContent() {
+        addChild(contentViewController)
+        containerView.addSubview(contentViewController.view)
+        contentViewController.didMove(toParent: self)
+
+        contentViewController.didUpdateHeight = { [weak self] in
+            self?.requestSheetLayoutUpdate()
+        }
+
+        setupScrollControllerIfNeeded()
     }
-  }
-  
-  @objc private func tapGestureHandler() {
-    dismiss(completion: { [weak self] in
-      self?.didClose?(true)
-    })
-  }
-  
-  @objc private func panGestureHandler(_ recognizer: UIPanGestureRecognizer) {
-    switch recognizer.state {
-    case .changed:
-      let translation = recognizer.translation(in: recognizer.view)
-      didDrag(offset: translation.y)
-    case .ended:
-      let translation = recognizer.translation(in: recognizer.view)
-      didEndDragging(offset: translation.y)
-    case .cancelled, .failed:
-      didFailedDrag()
-    default:
-      break
+
+    func setupHeader() {
+        containerView.addSubview(headerView)
+        headerView.setCloseAction { [weak self] in
+            self?.dismiss(completion: { [weak self] in
+                self?.didClose?(true)
+            })
+        }
+
+        headerView.configure(configuration: contentViewController.headerConfiguration)
+        contentViewController.didUpdateHeaderConfiguration = { [weak self, headerView] in
+            headerView.configure(configuration: $0)
+            self?.requestSheetLayoutUpdate()
+        }
     }
-  }
-  
-  func didDrag(offset: CGFloat) {
-    if offset < 0 {
-      let delta = max(offset, -.maximumDragOffset)
-      containerView.frame.origin.y = containerFrame.origin.y + delta
-      containerView.frame.size.height = containerFrame.size.height - delta
-    } else {
-      containerView.frame.origin.y = containerFrame.origin.y + offset
+
+    func setupScrollControllerIfNeeded() {
+        guard let scrollableContent = contentViewController as? TKBottomSheetScrollContentViewController else {
+            return
+        }
+
+        scrollController.scrollView = scrollableContent.scrollView
+        if let dynamicScrollableContent = contentViewController as? TKBottomSheetDynamicScrollContentViewController {
+            dynamicScrollableContent.didUpdateScrollView = { [weak self] scrollView in
+                self?.scrollController.scrollView = scrollView
+            }
+        }
+        scrollController.didEndDragging = { [weak self] offset, _ in
+            self?.didEndDragging(offset: offset)
+        }
+        scrollController.didDrag = { [weak self] offset in
+            self?.didDrag(offset: offset)
+        }
     }
-  }
-  
-  func didEndDragging(offset: CGFloat) {
-    if offset > 60 {
-      dismiss { [weak self] in
-        self?.didClose?(true)
-      }
-    } else {
-      animateDragging {
-        self.containerView.frame = self.containerFrame
-      }
+
+    func requestSheetLayoutUpdate() {
+        guard !isDismissing else { return }
+
+        if isPreparingInitialPresentation {
+            needsDeferredContentHeightUpdate = true
+            return
+        }
+
+        updateSheetLayout(animated: true)
     }
-  }
-  
-  func didFailedDrag() {
-    animateDragging {
-      self.containerView.frame = self.containerFrame
+
+    func updateSheetLayout(animated: Bool) {
+        let layout = measureSheetLayout()
+        if animated {
+            applyContentLayout(layout)
+            animateDragging {
+                self.applyContainerFrame(layout.containerFrame)
+            }
+        } else {
+            apply(layout: layout)
+        }
     }
-  }
-  
-  func animateDragging(animations: @escaping () -> Void,
-                       completion: ((Bool) -> Void)? = nil) {
-    UIView.animate(
-      withDuration: .animationDuration,
-      delay: .zero,
-      usingSpringWithDamping: .animationSpringDamping,
-      initialSpringVelocity: .animationSpringVelocity,
-      options: [.curveEaseInOut, .allowUserInteraction],
-      animations: animations,
-      completion: completion)
-  }
+
+    func performPresent() {
+        isPreparingInitialPresentation = true
+        needsDeferredContentHeightUpdate = false
+
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+
+        setupHeader()
+        setupContent()
+
+        apply(layout: measureSheetLayout())
+
+        if needsDeferredContentHeightUpdate {
+            needsDeferredContentHeightUpdate = false
+            apply(layout: measureSheetLayout())
+        }
+
+        let finalFrame = containerFrame
+        containerView.frame = makeHiddenContainerFrame(from: finalFrame)
+        dimmingView.prepareForPresentationTransition()
+
+        animateDragging {
+            self.dimmingView.performPresentationTransition()
+            self.containerView.frame = finalFrame
+        } completion: { [weak self] _ in
+            guard let self else { return }
+            self.isPreparingInitialPresentation = false
+
+            if self.needsDeferredContentHeightUpdate {
+                self.needsDeferredContentHeightUpdate = false
+                self.updateSheetLayout(animated: false)
+            }
+        }
+    }
+
+    func performDismiss(completion: (() -> Void)? = nil) {
+        isDismissing = true
+        dimmingView.prepareForDimissalTransition()
+        animateDragging {
+            self.containerView.frame.origin.y = self.view.bounds.height
+            self.dimmingView.performDismissalTransition()
+        } completion: { [weak self] _ in
+            completion?()
+            self?.isDismissing = false
+        }
+    }
+
+    private func measureSheetLayout() -> SheetLayout {
+        let width = sheetWidth
+        let headerHeight = measureHeaderHeight(forWidth: width)
+        let contentMaximumHeight = max(
+            view.bounds.height - view.safeAreaInsets.top - bottomSpacing - headerHeight,
+            0
+        )
+        let contentHeight = measureContentHeight(
+            forWidth: width,
+            maximumHeight: contentMaximumHeight
+        )
+        let containerHeight = headerHeight + contentHeight + bottomSpacing
+        let containerFrame = CGRect(
+            x: 0,
+            y: view.bounds.height - containerHeight,
+            width: width,
+            height: containerHeight
+        )
+        let headerFrame = CGRect(
+            x: 0,
+            y: 0,
+            width: width,
+            height: headerHeight
+        )
+        let contentFrame = CGRect(
+            x: 0,
+            y: headerFrame.maxY,
+            width: width,
+            height: contentHeight
+        )
+
+        return SheetLayout(
+            containerFrame: containerFrame,
+            headerFrame: headerFrame,
+            contentFrame: contentFrame
+        )
+    }
+
+    private func apply(layout: SheetLayout) {
+        applyContainerFrame(layout.containerFrame)
+        headerView.frame = layout.headerFrame
+        contentViewController.view.frame = layout.contentFrame
+    }
+
+    private func applyContentLayout(_ layout: SheetLayout) {
+        headerView.frame = layout.headerFrame
+        contentViewController.view.frame = layout.contentFrame
+        contentViewController.view.setNeedsLayout()
+        contentViewController.view.layoutIfNeeded()
+    }
+
+    private func applyContainerFrame(_ frame: CGRect) {
+        containerFrame = frame
+        containerView.frame = frame
+    }
+
+    private func makeHiddenContainerFrame(from containerFrame: CGRect) -> CGRect {
+        CGRect(
+            x: containerFrame.origin.x,
+            y: view.bounds.height,
+            width: containerFrame.width,
+            height: containerFrame.height
+        )
+    }
+
+    private func measureHeaderHeight(forWidth width: CGFloat) -> CGFloat {
+        let fittingSize = headerView.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        return ceil(fittingSize.height)
+    }
+
+    private func measureContentHeight(
+        forWidth width: CGFloat,
+        maximumHeight: CGFloat
+    ) -> CGFloat {
+        let availableHeight = max(maximumHeight, 1)
+
+        if let scrollableContent = contentViewController as? TKBottomSheetScrollContentViewController {
+            let measurementHeight = max(view.bounds.height, availableHeight)
+            prepareScrollableContentForMeasurement(
+                scrollableContent,
+                width: width,
+                height: measurementHeight
+            )
+
+            let contentHeight = scrollableContent.calculateHeight(withWidth: width)
+            let adjustedHeight = max(min(maximumHeight, contentHeight), 1)
+            scrollableContent.scrollView.isScrollEnabled = adjustedHeight < contentHeight
+
+            return adjustedHeight
+        }
+
+        let contentHeight = contentViewController.calculateHeight(withWidth: width)
+        return min(maximumHeight, contentHeight)
+    }
+
+    private func prepareScrollableContentForMeasurement(
+        _ scrollableContent: TKBottomSheetScrollContentViewController,
+        width: CGFloat,
+        height: CGFloat
+    ) {
+        scrollableContent.view.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: width,
+            height: height
+        )
+        scrollableContent.view.setNeedsLayout()
+        scrollableContent.view.layoutIfNeeded()
+    }
+
+    @objc private func tapGestureHandler() {
+        dismiss(completion: { [weak self] in
+            self?.didClose?(true)
+        })
+    }
+
+    @objc private func panGestureHandler(_ recognizer: UIPanGestureRecognizer) {
+        switch recognizer.state {
+        case .changed:
+            let translation = recognizer.translation(in: recognizer.view)
+            didDrag(offset: translation.y)
+        case .ended:
+            let translation = recognizer.translation(in: recognizer.view)
+            didEndDragging(offset: translation.y)
+        case .cancelled, .failed:
+            didFailedDrag()
+        default:
+            break
+        }
+    }
+
+    func didDrag(offset: CGFloat) {
+        if offset < 0 {
+            let delta = max(offset, -.maximumDragOffset)
+            containerView.frame.origin.y = containerFrame.origin.y + delta
+            containerView.frame.size.height = containerFrame.size.height - delta
+        } else {
+            containerView.frame.origin.y = containerFrame.origin.y + offset
+        }
+    }
+
+    func didEndDragging(offset: CGFloat) {
+        if offset > 60 {
+            dismiss { [weak self] in
+                self?.didClose?(true)
+            }
+        } else {
+            animateDragging {
+                self.containerView.frame = self.containerFrame
+            }
+        }
+    }
+
+    func didFailedDrag() {
+        animateDragging {
+            self.containerView.frame = self.containerFrame
+        }
+    }
+
+    func animateDragging(
+        animations: @escaping () -> Void,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        UIView.animate(
+            withDuration: .animationDuration,
+            delay: .zero,
+            usingSpringWithDamping: .animationSpringDamping,
+            initialSpringVelocity: .animationSpringVelocity,
+            options: [.curveEaseInOut, .allowUserInteraction],
+            animations: animations,
+            completion: completion
+        )
+    }
 }
 
 private extension CGFloat {
-  static let maximumDragOffset: CGFloat = 24
-  static let dragOffsetRatio: CGFloat = 1/2
-  static let dragTreshold: CGFloat = 1/3
-  static let velocityTreshold: CGFloat = 1500
-  static let animationSpringDamping: CGFloat = 2
-  static let animationSpringVelocity: CGFloat = 0
+    static let maximumDragOffset: CGFloat = 24
+    static let dragOffsetRatio: CGFloat = 1 / 2
+    static let dragTreshold: CGFloat = 1 / 3
+    static let velocityTreshold: CGFloat = 1500
+    static let animationSpringDamping: CGFloat = 2
+    static let animationSpringVelocity: CGFloat = 0
 }
 
 private extension TimeInterval {
-  static let animationDuration: TimeInterval = 0.4
+    static let animationDuration: TimeInterval = 0.4
 }

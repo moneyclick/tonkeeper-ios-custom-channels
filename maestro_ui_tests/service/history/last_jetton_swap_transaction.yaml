@@ -1,0 +1,17 @@
+appId: com.jbig.tonkeeper.dev
+---
+- runScript:
+    file: ../../scripts/api/v2/accounts/getLastSwapEvent.js
+    env:
+      addr: ${WALLET_WITH_MONEY_ADDR}
+      auth_token: ${auth}
+
+- runScript: ../../scripts/utils/formatter.js
+
+- assertTrue: ${output.jettonLastSwap.status == "ok"}
+- assertTrue: ${String(output.jettonLastSwapJettonSwap.ton_in) == nanoTonToSwap}
+
+- evalScript: ${output.jettonLastSwapUsdtLine = output.formatter.formatHistoryJettonIncomeLine(output.jettonLastSwapJettonSwap.amount_out, output.jettonLastSwapJettonSwap.jetton_master_out.decimals, "USD₮")}
+- assertVisible: ${output.jettonLastSwapUsdtLine}
+
+- runScript: ../../scripts/utils/check_history_time.js
