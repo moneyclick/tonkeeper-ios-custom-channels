@@ -1,24 +1,29 @@
 import UIKit
 
 public extension UIView {
+    func addSubviews(_ views: UIView...) {
+        views.forEach { addSubview($0) }
+    }
 
-  func addSubviews(_ views: [UIView]) {
-    views.forEach { addSubview($0) }
-  }
+    func removeSubviews() {
+        subviews.forEach { $0.removeFromSuperview() }
+    }
 
-  func addSubviews(_ views: UIView...) {
-    views.forEach { addSubview($0) }
-  }
+    func heightThatFits(_ height: CGFloat) -> CGFloat {
+        return sizeThatFits(CGSize(width: bounds.width, height: height)).height
+    }
 
-  func removeSubviews() {
-    subviews.forEach { $0.removeFromSuperview() }
-  }
+    var isReachableByUser: Bool {
+        guard let window else {
+            return false
+        }
 
-  func widthThatFits(_ width: CGFloat) -> CGFloat {
-    return sizeThatFits(CGSize(width: width, height: bounds.height)).width
-  }
+        let boundsCenter = CGPoint(x: bounds.midX, y: bounds.midY)
+        let centerInWindow = convert(boundsCenter, to: window)
+        guard let hitView = window.hitTest(centerInWindow, with: nil) else {
+            return false
+        }
 
-  func heightThatFits(_ height: CGFloat) -> CGFloat {
-    return sizeThatFits(CGSize(width: bounds.width, height: height)).height
-  }
+        return hitView === self || hitView.isDescendant(of: self)
+    }
 }

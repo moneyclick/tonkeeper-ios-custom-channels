@@ -1,0 +1,38 @@
+appId: com.jbig.tonkeeper
+---
+- extendedWaitUntil:
+    visible: "Import existing wallet"
+    timeout: 45000
+
+- tapOn: Import existing wallet
+
+- extendedWaitUntil:
+    visible: "Existing Wallet"
+    timeout: 30000
+
+- tapOn: Existing Wallet
+
+- runFlow: "mnemonic/24key_words.yaml"
+
+- assertVisible: Create passcode
+- repeat:
+    times: 4
+    commands:
+      - tapOn: ${PASSWORD_KEY}
+
+- assertVisible: Re-enter passcode
+- repeat:
+    times: 4
+    commands:
+      - tapOn: ${PASSWORD_KEY}
+
+- tapOn:
+    text: Continue
+    waitToSettleTimeoutMs: 15000
+
+- waitForAnimationToEnd:
+    timeout: 5000
+
+- tapOn:
+    id: stories_close
+    optional: true

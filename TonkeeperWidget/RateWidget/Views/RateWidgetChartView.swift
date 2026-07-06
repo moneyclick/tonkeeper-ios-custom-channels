@@ -6,25 +6,12 @@
 //
 
 import SwiftUI
-import TKChart
+import TKUIKit
 
 struct RateWidgetChartView: View {
-  let chartData: RateWidgetEntry.ChartData
-  
-  func chartImage(size: CGSize) -> SwiftUI.Image {
-    let chartView = TKLineChartView()
-    chartView.frame.size = size
-    chartView.layoutIfNeeded()
-    chartView.setChartData(chartData.data)
-    if let image = chartView.getImage(transparent: true) {
-      return .init(uiImage: image)
+    let chartData: RateWidgetEntry.ChartData
+
+    var body: some View {
+        TKLineChartCanvasView(chartData: chartData.data)
     }
-    return .init(uiImage: UIImage())
-  }
-  
-  var body: some View {
-    GeometryReader { geometry in
-      chartImage(size: geometry.size)
-    }
-  }
 }

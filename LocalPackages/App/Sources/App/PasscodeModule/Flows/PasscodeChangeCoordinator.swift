@@ -1,143 +1,160 @@
-import UIKit
-import TKCoordinator
-import TKUIKit
 import KeeperCore
+import TKCoordinator
+import TKCore
 import TKLocalize
+import TKLogging
+import TKUIKit
+import UIKit
 
 final class PasscodeChangeCoordinator: RouterCoordinator<NavigationControllerRouter> {
-  
-  var didChangePasscode: (() -> Void)?
-  var didCancel: (() -> Void)?
-  
-  private let passcodeNavigationController = UINavigationController()
-  private var passcodeModuleInput: PasscodeModuleInput?
-  private var passcodeInputs = [PasscodeInputModuleInput]()
-  
-  private let keeperCoreAssembly: KeeperCore.MainAssembly
-  
-  init(router: NavigationControllerRouter,
-       keeperCoreAssembly: KeeperCore.MainAssembly) {
-    self.keeperCoreAssembly = keeperCoreAssembly
-    super.init(router: router)
-    passcodeNavigationController.setNavigationBarHidden(true, animated: false)
-  }
-  
-  override func start() {
-    open()
-  }
+    var didChangePasscode: (() -> Void)?
+    var didCancel: (() -> Void)?
+
+    private let passcodeNavigationController = UINavigationController()
+    private var passcodeModuleInput: PasscodeModuleInput?
+    private var passcodeInputs = [PasscodeInputModuleInput]()
+
+    private let keeperCoreAssembly: KeeperCore.MainAssembly
+
+    init(
+        router: NavigationControllerRouter,
+        keeperCoreAssembly: KeeperCore.MainAssembly
+    ) {
+        self.keeperCoreAssembly = keeperCoreAssembly
+        super.init(router: router)
+        passcodeNavigationController.setNavigationBarHidden(true, animated: false)
+    }
+
+    override func start() {
+        open()
+    }
 }
 
 private extension PasscodeChangeCoordinator {
-  func open() {
-    let passcodeModule = PasscodeAssembly.module(
-      navigationController: passcodeNavigationController
-    )
-    
-    passcodeModuleInput = passcodeModule.input
-    
-    passcodeModule.output.didTapBackspace = { [weak self] in
-      self?.passcodeInputs.last?.didTapBackspace()
-    }
-    
-    passcodeModule.output.didTapDigit = { [weak self] digit in
-      self?.passcodeInputs.last?.didTapDigit(digit)
-    }
-    
-    if router.rootViewController.viewControllers.isEmpty {
-      passcodeModule.view.setupLeftCloseButton { [weak self] in
-        self?.didCancel?()
-      }
-    } else {
-      passcodeModule.view.setupBackButton()
+    func open() {
+        let passcodeModule = PasscodeAssembly.module(
+            navigationController: passcodeNavigationController
+        )
+
+        passcodeModuleInput = passcodeModule.input
+
+        passcodeModule.output.didTapBackspace = { [weak self] in
+            self?.passcodeInputs.last?.didTapBackspace()
+        }
+
+        passcodeModule.output.didTapDigit = { [weak self] digit in
+            self?.passcodeInputs.last?.didTapDigit(digit)
+        }
+
+        if router.rootViewController.viewControllers.isEmpty {
+            passcodeModule.view.setupLeftCloseButton { [weak self] in
+                self?.didCancel?()
+            }
+        } else {
+            passcodeModule.view.setupBackButton()
+        }
+
+        router.push(
+            viewController: passcodeModule.view,
+            animated: false
+        )
+        openInputPasscode()
     }
 
-    router.push(viewController: passcodeModule.view,
-                animated: false)
-    openInputPasscode()
-  }
-  
-  func openInputPasscode() {
-    let passcodeInput = PasscodeInputAssembly.module(
-      title: TKLocales.Passcode.enter
-    )
-    
-    passcodeInput.output.validateInput = { [weak self] input in
-      guard let self else { return .failed }
-      return await Task<PasscodeInputValidationResult, Never> {
-        let isValid = await self.keeperCoreAssembly.secureAssembly.mnemonicsRepository().checkIfPasswordValid(
-          input
+    func openInputPasscode() {
+        let passcodeInput = PasscodeInputAssembly.module(
+            title: TKLocales.Passcode.enter
         )
-        return isValid ? .success : .failed
-      }.value
-    }
-    
-    passcodeInput.output.didFinish = { [weak self] passcode in
-      self?.openCreatePasscode(oldPasscode: passcode)
-    }
-    
-    passcodeInputs.append(passcodeInput.input)
-    
-    passcodeNavigationController.pushViewController(
-      passcodeInput.viewController,
-      animated: true
-    )
-  }
-  
-  func openCreatePasscode(oldPasscode: String) {
-    let passcodeInput = PasscodeInputAssembly.module(
-      title: TKLocales.Passcode.create
-    )
-    
-    passcodeInput.output.validateInput = { passcode in
-      return .none
-    }
-    
-    passcodeInput.output.didFinish = { [weak self] passcode in
-      self?.openReenterPasscode(oldPasscode: oldPasscode, newPasscode: passcode)
-    }
-    
-    passcodeInputs.append(passcodeInput.input)
-    
-    passcodeNavigationController.pushViewController(
-      passcodeInput.viewController,
-      animated: true
-    )
-  }
-  
-  func openReenterPasscode(oldPasscode: String, newPasscode: String) {
-    let passcodeInput = PasscodeInputAssembly.module(
-      title: TKLocales.Passcode.reenter
-    )
-    
-    passcodeInput.output.validateInput = { passcode in
-      return passcode == newPasscode ? .success : .failed
-    }
-    
-    passcodeInput.output.didFinish = { [weak self] passcode in
-      guard let self else { return }
-      Task {
-        try await self.keeperCoreAssembly.secureAssembly.mnemonicsRepository().changePassword(
-          oldPassword: oldPasscode,
-          newPassword: newPasscode
-        )
-        try? self.keeperCoreAssembly.secureAssembly.mnemonicsRepository().deletePassword()
-        await self.keeperCoreAssembly.storesAssembly.securityStore.setIsBiometryEnable(false)
-        await MainActor.run {
-          self.didChangePasscode?()
+
+        passcodeInput.output.validateInput = { [weak self] input in
+            guard let self else { return .failed }
+
+            return await Task<PasscodeInputValidationResult, Never> {
+                let isValid = await self.keeperCoreAssembly.secureAssembly.mnemonicAccess.validatePasscode(
+                    input
+                )
+                return isValid ? .success : .failed
+            }.value
         }
-      }
+
+        passcodeInput.output.didFinish = { [weak self] passcode in
+            self?.openCreatePasscode(oldPasscode: passcode)
+        }
+
+        passcodeInputs.append(passcodeInput.input)
+
+        passcodeNavigationController.pushViewController(
+            passcodeInput.viewController,
+            animated: true
+        )
     }
-    
-    passcodeInput.output.didFailed = { [weak self] in
-      self?.passcodeNavigationController.popViewController(animated: true)
-      _ = self?.passcodeInputs.popLast()
+
+    func openCreatePasscode(oldPasscode: String) {
+        let passcodeInput = PasscodeInputAssembly.module(
+            title: TKLocales.Passcode.create
+        )
+
+        passcodeInput.output.validateInput = { _ in
+            .none
+        }
+
+        passcodeInput.output.didFinish = { [weak self] passcode in
+            self?.openReenterPasscode(oldPasscode: oldPasscode, newPasscode: passcode)
+        }
+
+        passcodeInputs.append(passcodeInput.input)
+
+        passcodeNavigationController.pushViewController(
+            passcodeInput.viewController,
+            animated: true
+        )
     }
-    
-    passcodeInputs.append(passcodeInput.input)
-    
-    passcodeNavigationController.pushViewController(
-      passcodeInput.viewController,
-      animated: true
-    )
-  }
+
+    func openReenterPasscode(oldPasscode: String, newPasscode: String) {
+        let passcodeInput = PasscodeInputAssembly.module(
+            title: TKLocales.Passcode.reenter
+        )
+
+        passcodeInput.output.validateInput = { passcode in
+            passcode == newPasscode ? .success : .failed
+        }
+
+        passcodeInput.output.didFinish = { [weak self] _ in
+            guard let self else { return }
+            Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await keeperCoreAssembly.mnemonicAccess.changePasscode(
+                        old: oldPasscode,
+                        new: newPasscode
+                    )
+                    do {
+                        try keeperCoreAssembly.mnemonicAccess.deletePasscode()
+                    } catch {
+                        Log.e("🪵 failed to remove old passcode from vault due to error: \(error)")
+                    }
+                    await self.keeperCoreAssembly.storesAssembly.securityStore.setIsBiometryEnable(false)
+                    await MainActor.run {
+                        self.didChangePasscode?()
+                    }
+                } catch {
+                    await MainActor.run {
+                        ToastPresenter.showToast(configuration: .failed)
+                    }
+                }
+            }
+        }
+
+        passcodeInput.output.didFailed = { [weak self] in
+            self?.passcodeNavigationController.popViewController(animated: true)
+            _ = self?.passcodeInputs.popLast()
+        }
+
+        passcodeInputs.append(passcodeInput.input)
+
+        passcodeNavigationController.pushViewController(
+            passcodeInput.viewController,
+            animated: true
+        )
+    }
 }

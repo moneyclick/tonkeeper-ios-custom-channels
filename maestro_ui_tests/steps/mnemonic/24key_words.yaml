@@ -1,0 +1,22 @@
+appId: com.jbig.tonkeeper
+---
+- assertVisible: Enter recovery phrase
+- runScript:
+    file: ../../scripts/parse_mnemonic.js
+    env:
+      phrase: ${WALLET_WITH_MONEY}
+
+- evalScript: ${output.i = 0}
+- repeat:
+    while:
+      true: ${output.i <= 23}
+    commands:
+      - evalScript: ${output.wordId = 'mnemonic.input.' + output.i}
+      - tapOn:
+          id: ${output.wordId}
+      - evalScript: ${output.currentWord = output.word[output.i]}
+      - inputText: ${output.currentWord}
+      - pressKey: enter
+      - evalScript: ${output.i++}
+
+- tapOn: Continue

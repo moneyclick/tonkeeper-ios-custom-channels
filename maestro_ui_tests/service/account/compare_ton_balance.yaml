@@ -1,0 +1,13 @@
+appId: com.jbig.tonkeeper
+---
+- runScript: ../../scripts/utils/formatter.js
+
+- runScript:
+    file: ../../scripts/api/v2/accounts/getAddressInfo.js
+    env:
+      addr: ${WALLET_WITH_MONEY_ADDR}
+      auth_token: ${auth}
+
+- evalScript: ${output.screenTonValue = output.formatter.formatTon(output.balance)}
+
+- assertVisible: ${output.screenTonValue}

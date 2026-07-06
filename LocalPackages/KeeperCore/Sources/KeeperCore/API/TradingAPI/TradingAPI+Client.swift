@@ -1,0 +1,28 @@
+import Foundation
+import StreamURLSessionTransport
+import TKTradingAPI
+
+extension TKTradingAPI.Client {
+    enum InitFailure: Error {
+        case badHost(
+            rawValue: String
+        )
+    }
+
+    init(
+        hostProvider: APIHostProvider,
+        urlSession: URLSession
+    ) async throws(InitFailure) {
+        let basePath = await hostProvider.basePath
+        guard let hostUrl = URL(string: basePath) else {
+            throw .badHost(rawValue: basePath)
+        }
+        self = Client(
+            serverURL: hostUrl,
+            transport: StreamURLSessionTransport(
+                urlSessionConfiguration: urlSession.configuration
+            ),
+            middlewares: []
+        )
+    }
+}

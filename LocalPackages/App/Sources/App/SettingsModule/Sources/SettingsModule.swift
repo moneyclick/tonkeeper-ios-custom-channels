@@ -1,35 +1,40 @@
-import TKUIKit
+import KeeperCore
 import TKCoordinator
 import TKCore
-import KeeperCore
+import TKUIKit
 
 @MainActor
 struct SettingsModule {
-  private let dependencies: Dependencies
-  init(dependencies: Dependencies) {
-    self.dependencies = dependencies
-  }
-  
-  func createSettingsCoordinator(router: NavigationControllerRouter, wallet: Wallet) -> SettingsCoordinator {
-    let coordinator = SettingsCoordinator(
-      wallet: wallet,
-      keeperCoreMainAssembly: dependencies.keeperCoreMainAssembly,
-      coreAssembly: dependencies.coreAssembly,
-      router: router
-    )
-    return coordinator
-  }
+    private let dependencies: Dependencies
+    init(dependencies: Dependencies) {
+        self.dependencies = dependencies
+    }
+
+    func createSettingsCoordinator(router: NavigationControllerRouter, wallet: Wallet) -> SettingsCoordinator {
+        return SettingsCoordinator(
+            wallet: wallet,
+            inAppReviewService: dependencies.inAppReviewService,
+            keeperCoreMainAssembly: dependencies.keeperCoreMainAssembly,
+            coreAssembly: dependencies.coreAssembly,
+            router: router
+        )
+    }
 }
 
 extension SettingsModule {
-  struct Dependencies {
-    let keeperCoreMainAssembly: KeeperCore.MainAssembly
-    let coreAssembly: TKCore.CoreAssembly
-    
-    init(keeperCoreMainAssembly: KeeperCore.MainAssembly,
-         coreAssembly: TKCore.CoreAssembly) {
-      self.keeperCoreMainAssembly = keeperCoreMainAssembly
-      self.coreAssembly = coreAssembly
+    struct Dependencies {
+        let inAppReviewService: InAppReviewService
+        let keeperCoreMainAssembly: KeeperCore.MainAssembly
+        let coreAssembly: TKCore.CoreAssembly
+
+        init(
+            inAppReviewService: InAppReviewService,
+            keeperCoreMainAssembly: KeeperCore.MainAssembly,
+            coreAssembly: TKCore.CoreAssembly
+        ) {
+            self.inAppReviewService = inAppReviewService
+            self.keeperCoreMainAssembly = keeperCoreMainAssembly
+            self.coreAssembly = coreAssembly
+        }
     }
-  }
 }
