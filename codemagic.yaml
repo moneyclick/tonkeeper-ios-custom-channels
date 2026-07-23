@@ -13,10 +13,20 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          if [ -f "Makefile" ]; then
-            make setup
-          elif [ -f "Podfile" ]; then
+          echo "Skipping make setup - requires private ios_keys repo"
+          echo "Building without Firebase keys (test build)"
+          
+          # Install CocoaPods if Podfile exists
+          if [ -f "Podfile" ]; then
+            echo "Installing CocoaPods dependencies..."
             pod install
+          else
+            echo "No Podfile found"
+          fi
+          
+          # Setup git hooks
+          if [ -f "scripts/hooks/setup_hooks.sh" ]; then
+            sh ./scripts/hooks/setup_hooks.sh || echo "Hooks setup failed, continuing..."
           fi
       - name: Build for iOS Simulator (No signing required)
         script: |
@@ -51,8 +61,10 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          if [ -f "Makefile" ]; then
-            make setup
+          # Skip make setup - it requires private ios_keys repo
+          echo "Skipping make setup - building without private keys"
+          if [ -f "Podfile" ]; then
+            pod install
           fi
       - name: Build debug version
         script: |
