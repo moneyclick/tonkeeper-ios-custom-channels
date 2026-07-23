@@ -1,47 +1,78 @@
 workflows:
-  ios-tonkeeper-custom-channels:
-    name: Tonkeeper iOS Custom Channels Build (Simulator)
+  ios-tonkeeper-ipa-dev:
+    name: Tonkeeper iOS - Dev IPA Build
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
       vars:
         XCODE_PROJECT: "Tonkeeper.xcodeproj"
         XCODE_SCHEME: "TonkeeperDev"
-      xcode: latest
+        BUNDLE_ID: "com.tonkeeper.app.dev"
+      xcode: 16.2
       cocoapods: default
-    # IMPORTANT: No code signing configuration!
+      ios_signing:
+        distribution_type: development
+        bundle_identifier: com.tonkeeper.app.dev
     scripts:
       - name: Install dependencies
         script: |
           echo "Skipping make setup - requires private ios_keys repo"
-          echo "Building without Firebase keys (test build)"
+          echo "Building without Firebase keys (dev build with custom channels)"
           
-          # Install CocoaPods if Podfile exists
           if [ -f "Podfile" ]; then
             echo "Installing CocoaPods dependencies..."
             pod install
-          else
-            echo "No Podfile found"
           fi
           
-          # Setup git hooks
           if [ -f "scripts/hooks/setup_hooks.sh" ]; then
             sh ./scripts/hooks/setup_hooks.sh || echo "Hooks setup failed, continuing..."
           fi
-      - name: Build for iOS Simulator (No signing required)
+      - name: Build IPA for development
         script: |
-          xcodebuild \
+          # Build and archive for device with automatic signing
+          xcodebuild archive \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-            clean build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            -archivePath "$HOME/build/tonkeeper.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            PROVISIONING_PROFILE_SPECIFIER=""
+          
+          # Export IPA
+          xcodebuild -exportArchive \
+            -archivePath "$HOME/build/tonkeeper.xcarchive" \
+            -exportPath "$HOME/build" \
+            -exportOptionsPlist "$HOME/export_options.plist"
+          
+          echo "✅ IPA created successfully"
+          ls -lh "$HOME/build/"*.ipa
+      - name: Create export options
+        script: |
+          cat > "$HOME/export_options.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>teamID</key>
+            <string>$DEVELOPMENT_TEAM</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>compileBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>signingStyle</key>
+            <string>automatic</string>
+          </dict>
+          </plist>
+          EOF
     artifacts:
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/build/*.ipa
+      - $HOME/build/tonkeeper.xcarchive
       - /tmp/xcodebuild_logs/*.log
     publishing:
       email:
@@ -51,28 +82,4 @@ workflows:
           success: true
           failure: true
 
-  ios-tonkeeper-debug-build:
-    name: Tonkeeper iOS Debug Build
-    max_build_duration: 60
-    instance_type: mac_mini_m1
-    environment:
-      xcode: latest
-      cocoapods: default
-    scripts:
-      - name: Install dependencies
-        script: |
-          # Skip make setup - it requires private ios_keys repo
-          echo "Skipping make setup - building without private keys"
-          if [ -f "Podfile" ]; then
-            pod install
-          fi
-      - name: Build debug version
-        script: |
-          xcodebuild \
-            -project Tonkeeper.xcodeproj \
-            -scheme TonkeeperDev \
-            -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            clean build
-    artifacts:
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+
