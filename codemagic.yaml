@@ -1,79 +1,49 @@
 workflows:
-  ios-tonkeeper-ipa-dev:
-    name: Tonkeeper iOS - Dev IPA Build
+  ios-tonkeeper-unsigned-ipa:
+    name: Tonkeeper iOS Custom Channels - Unsigned IPA
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
       vars:
         XCODE_PROJECT: "Tonkeeper.xcodeproj"
         XCODE_SCHEME: "TonkeeperDev"
-        BUNDLE_ID: "com.tonkeeper.app.dev"
       xcode: 16.2
       cocoapods: default
-      ios_signing:
-        distribution_type: development
-        bundle_identifier: com.tonkeeper.app.dev
     scripts:
       - name: Install dependencies
         script: |
-          echo "Skipping make setup - requires private ios_keys repo"
-          echo "Building without Firebase keys (dev build with custom channels)"
+          echo "Building Tonkeeper with Custom Channels feature"
+          echo "Skipping make setup (requires private ios_keys)"
           
           if [ -f "Podfile" ]; then
-            echo "Installing CocoaPods dependencies..."
+            echo "Installing CocoaPods..."
             pod install
           fi
-          
-          if [ -f "scripts/hooks/setup_hooks.sh" ]; then
-            sh ./scripts/hooks/setup_hooks.sh || echo "Hooks setup failed, continuing..."
-          fi
-      - name: Build IPA for development
+      - name: Build unsigned IPA
         script: |
-          # Build and archive for device with automatic signing
+          # Build archive without code signing
           xcodebuild archive \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Debug \
             -archivePath "$HOME/build/tonkeeper.xcarchive" \
             -destination 'generic/platform=iOS' \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            PROVISIONING_PROFILE_SPECIFIER=""
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM=""
           
-          # Export IPA
-          xcodebuild -exportArchive \
-            -archivePath "$HOME/build/tonkeeper.xcarchive" \
-            -exportPath "$HOME/build" \
-            -exportOptionsPlist "$HOME/export_options.plist"
+          # Create unsigned IPA
+          mkdir -p "$HOME/build/Payload"
+          cp -r "$HOME/build/tonkeeper.xcarchive/Products/Applications/"*.app "$HOME/build/Payload/"
+          cd "$HOME/build"
+          zip -r tonkeeper-custom-channels-unsigned.ipa Payload
           
-          echo "✅ IPA created successfully"
+          echo "✅ Unsigned IPA created!"
           ls -lh "$HOME/build/"*.ipa
-      - name: Create export options
-        script: |
-          cat > "$HOME/export_options.plist" << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>development</string>
-            <key>teamID</key>
-            <string>$DEVELOPMENT_TEAM</string>
-            <key>uploadBitcode</key>
-            <false/>
-            <key>compileBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <true/>
-            <key>signingStyle</key>
-            <string>automatic</string>
-          </dict>
-          </plist>
-          EOF
     artifacts:
       - $HOME/build/*.ipa
       - $HOME/build/tonkeeper.xcarchive
-      - /tmp/xcodebuild_logs/*.log
     publishing:
       email:
         recipients:
