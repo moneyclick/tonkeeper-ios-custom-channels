@@ -7,8 +7,9 @@ workflows:
       vars:
         XCODE_PROJECT: "Tonkeeper.xcodeproj"
         XCODE_SCHEME: "TonkeeperDev"
-      xcode: 15.0
+      xcode: 14.2
       cocoapods: default
+    # IMPORTANT: No code signing configuration!
     scripts:
       - name: Install dependencies
         script: |
@@ -45,7 +46,7 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m1
     environment:
-      xcode: 15.0
+      xcode: 14.2
       cocoapods: default
     scripts:
       - name: Install dependencies
