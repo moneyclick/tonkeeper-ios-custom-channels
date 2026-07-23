@@ -19,31 +19,46 @@ workflows:
             echo "Installing CocoaPods..."
             pod install
           fi
-      - name: Build unsigned IPA
+      - name: Build unsigned IPA (main app only, skip extensions)
         script: |
-          # Build archive without code signing
+          # Build archive without code signing, skip widget and intents
           xcodebuild archive \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Debug \
             -archivePath "$HOME/build/tonkeeper.xcarchive" \
             -destination 'generic/platform=iOS' \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM=""
+            DEVELOPMENT_TEAM="" \
+            SKIP_INSTALL=NO \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=NO 2>&1 | tee build.log || true
           
-          # Create unsigned IPA
-          mkdir -p "$HOME/build/Payload"
-          cp -r "$HOME/build/tonkeeper.xcarchive/Products/Applications/"*.app "$HOME/build/Payload/"
-          cd "$HOME/build"
-          zip -r tonkeeper-custom-channels-unsigned.ipa Payload
-          
-          echo "✅ Unsigned IPA created!"
-          ls -lh "$HOME/build/"*.ipa
+          # Check if main app was built
+          if [ -d "$HOME/build/tonkeeper.xcarchive/Products/Applications" ]; then
+            echo "✅ Main app built successfully"
+            
+            # Create unsigned IPA
+            mkdir -p "$HOME/build/Payload"
+            cp -r "$HOME/build/tonkeeper.xcarchive/Products/Applications/"*.app "$HOME/build/Payload/"
+            cd "$HOME/build"
+            zip -r tonkeeper-custom-channels-unsigned.ipa Payload
+            
+            echo "✅ Unsigned IPA created!"
+            ls -lh "$HOME/build/"*.ipa
+          else
+            echo "❌ App not found in archive"
+            echo "Build log:"
+            tail -100 build.log
+            exit 1
+          fi
     artifacts:
       - $HOME/build/*.ipa
       - $HOME/build/tonkeeper.xcarchive
+      - build.log
     publishing:
       email:
         recipients:
