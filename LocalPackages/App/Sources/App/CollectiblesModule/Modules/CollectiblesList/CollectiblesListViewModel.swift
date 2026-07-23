@@ -19,6 +19,7 @@ protocol CollectiblesListViewModel: AnyObject {
     func getNFTCellModel(identifier: String) -> CollectibleCollectionViewCell.Model?
     func didSelectNftAt(index: Int)
     func reload()
+    func addCustomChannel(username: String)
 }
 
 @MainActor
@@ -34,6 +35,7 @@ final class CollectiblesListViewModelImplementation: CollectiblesListViewModel, 
     var didStopLoading: (() -> Void)?
 
     func viewDidLoad() {
+        loadCustomChannels()
         Task { await walletNFTsStore.addObserver(self) }
 
         appSettingsStore.addObserver(self) { observer, event in
@@ -62,11 +64,49 @@ final class CollectiblesListViewModelImplementation: CollectiblesListViewModel, 
     func reload() {
         Task { await walletNFTsStore.loadNFTs() }
     }
+    
+    func addCustomChannel(username: String) {
+        let imageURL = "https://cache.tonapi.io/imgproxy/6bjc3arFMRcsqoh80US6jmQ6_OIflSLewvFd1XxcuIk/rs:fill:500:500:1/g:no/\(encodeUsername(username)).webp"
+        let channel = CustomChannel(username: username, imageURL: imageURL)
+        customChannels.append(channel)
+        saveCustomChannels()
+        update()
+    }
+    
+    private func encodeUsername(_ username: String) -> String {
+        let urlString = "https://nft.fragment.com/username/\(username).webp"
+        guard let data = urlString.data(using: .utf8) else { return "" }
+        return data.base64EncodedString()
+    }
+    
+    private func saveCustomChannels() {
+        if let encoded = try? JSONEncoder().encode(customChannels) {
+            UserDefaults.standard.set(encoded, forKey: "customChannels")
+        }
+    }
+    
+    private func loadCustomChannels() {
+        if let data = UserDefaults.standard.data(forKey: "customChannels"),
+           let decoded = try? JSONDecoder().decode([CustomChannel].self, from: data) {
+            customChannels = decoded
+        }
+    }
 
     // MARK: - State
 
     private var models = [String: CollectibleCollectionViewCell.Model]()
     private var nfts = [NFT]()
+    private var customChannels: [CustomChannel] = []
+    
+    // Custom channel structure
+    struct CustomChannel: Codable {
+        let username: String
+        let imageURL: String
+        
+        var displayName: String {
+            "@\(username)"
+        }
+    }
 
     // MARK: - Mapper
 
@@ -121,12 +161,22 @@ private extension CollectiblesListViewModelImplementation {
 
     func createSnapshot(state: [NFT]) -> CollectiblesList.Snapshot {
         var snapshot = CollectiblesList.Snapshot()
-        if state.isEmpty {
+        
+        let hasContent = !state.isEmpty || !customChannels.isEmpty
+        
+        if !hasContent {
             snapshot.appendSections([.empty])
             snapshot.appendItems([.empty], toSection: .empty)
         } else {
             snapshot.appendSections([.all])
-            snapshot.appendItems(state.map { .nft(identifier: $0.address.toString()) }, toSection: .all)
+            
+            // Add custom channels first
+            let channelItems = customChannels.map { CollectiblesList.Item.customChannel(identifier: $0.username) }
+            snapshot.appendItems(channelItems, toSection: .all)
+            
+            // Then add NFTs
+            let nftItems = state.map { CollectiblesList.Item.nft(identifier: $0.address.toString()) }
+            snapshot.appendItems(nftItems, toSection: .all)
         }
 
         if #available(iOS 15.0, *) {
@@ -139,11 +189,30 @@ private extension CollectiblesListViewModelImplementation {
     }
 
     func createModels(state: [NFT], isSecureMode: Bool) -> [String: CollectibleCollectionViewCell.Model] {
-        return state.reduce(into: [String: CollectibleCollectionViewCell.Model]()) { result, item in
+        var result = [String: CollectibleCollectionViewCell.Model]()
+        
+        // Add custom channels
+        for channel in customChannels {
+            let model = CollectibleCollectionViewCell.Model(
+                image: .url(URL(string: channel.imageURL)),
+                title: channel.displayName,
+                subtitle: "Telegram User",
+                verification: nil,
+                isOnSale: false,
+                isApprovedByOwner: false,
+                action: nil
+            )
+            result[channel.username] = model
+        }
+        
+        // Add NFTs
+        for item in state {
             let model = collectiblesListMapper.map(nft: item, isSecureMode: isSecureMode)
             let identifier = item.address.toString()
             result[identifier] = model
         }
+        
+        return result
     }
 }
 

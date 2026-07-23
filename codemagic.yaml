@@ -1,0 +1,75 @@
+workflows:
+  ios-tonkeeper-custom-channels:
+    name: Tonkeeper iOS Custom Channels Build
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    integrations:
+      app_store_connect: Tonkeeper
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.tonkeeper.app
+      vars:
+        XCODE_WORKSPACE: "Tonkeeper.xcodeproj"
+        XCODE_SCHEME: "Tonkeeper"
+        APP_STORE_APP_ID: YOUR_APP_STORE_ID
+      xcode: 15.0
+      cocoapods: default
+    scripts:
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      - name: Get CocoaPods dependencies
+        script: |
+          if [ -f "Podfile" ]; then
+            pod install
+          fi
+      - name: Build ipa for distribution
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+        submit_to_app_store: false
+
+  ios-tonkeeper-debug-build:
+    name: Tonkeeper iOS Debug Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      xcode: 15.0
+      cocoapods: default
+    scripts:
+      - name: Install dependencies
+        script: |
+          if [ -f "Makefile" ]; then
+            make setup
+          fi
+      - name: Build debug version
+        script: |
+          xcodebuild \
+            -project Tonkeeper.xcodeproj \
+            -scheme TonkeeperDev \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            clean build
+    artifacts:
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app

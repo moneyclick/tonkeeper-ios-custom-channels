@@ -17,6 +17,10 @@ final class CollectiblesListViewController: GenericViewViewController<Collectibl
 
     private var emptyViewController = TKEmptyViewController()
     private let viewModel: CollectiblesListViewModel
+    
+    // Custom channels support
+    private var lastTapTime: TimeInterval = 0
+    private let doubleTapThreshold: TimeInterval = 0.5
 
     init(viewModel: CollectiblesListViewModel) {
         self.viewModel = viewModel
@@ -33,6 +37,7 @@ final class CollectiblesListViewController: GenericViewViewController<Collectibl
 
         setup()
         setupBindings()
+        setupNavigationBarDoubleTap()
         viewModel.viewDidLoad()
     }
 
@@ -56,6 +61,54 @@ private extension CollectiblesListViewController {
             TKContainerCollectionViewCell.self,
             forCellWithReuseIdentifier: TKContainerCollectionViewCell.reuseIdentifier
         )
+    }
+    
+    func setupNavigationBarDoubleTap() {
+        // Add tap gesture to navigation bar title view
+        if let navigationBar = navigationController?.navigationBar {
+            let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleNavigationBarTap))
+            navigationBar.addGestureRecognizer(tapGesture)
+        }
+    }
+    
+    @objc func handleNavigationBarTap() {
+        let currentTime = Date().timeIntervalSince1970
+        if currentTime - lastTapTime < doubleTapThreshold {
+            // Double tap detected
+            showAddChannelDialog()
+            lastTapTime = 0
+        } else {
+            lastTapTime = currentTime
+        }
+    }
+    
+    func showAddChannelDialog() {
+        let alert = UIAlertController(
+            title: "Add Custom Channel",
+            message: "Enter username or number",
+            preferredStyle: .alert
+        )
+        
+        alert.addTextField { textField in
+            textField.placeholder = "e.g., bobico"
+            textField.autocapitalizationType = .none
+        }
+        
+        let addAction = UIAlertAction(title: "Add", style: .default) { [weak self, weak alert] _ in
+            guard let username = alert?.textFields?.first?.text, !username.isEmpty else { return }
+            self?.addCustomChannel(username: username)
+        }
+        
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel)
+        
+        alert.addAction(addAction)
+        alert.addAction(cancelAction)
+        
+        present(alert, animated: true)
+    }
+    
+    func addCustomChannel(username: String) {
+        viewModel.addCustomChannel(username: username)
     }
 
     func setupBindings() {
@@ -87,6 +140,12 @@ private extension CollectiblesListViewController {
             guard let self else { return nil }
             switch itemIdentifier {
             case let .nft(identifier):
+                return collectionView.dequeueConfiguredReusableCell(
+                    using: nftCellConfiguration,
+                    for: indexPath,
+                    item: identifier
+                )
+            case let .customChannel(identifier):
                 return collectionView.dequeueConfiguredReusableCell(
                     using: nftCellConfiguration,
                     for: indexPath,
