@@ -183,8 +183,9 @@ then
 			echo "1" >/dev/null
 		else
 			mkdir -p "$THIN/$RAW_ARCH"
+			chmod +x "$SOURCE/configure"
 			if [ "$PLATFORM" = "linux" ]; then
-				TMPDIR=${TMPDIR/%\/} "$SOURCE/configure" \
+				TMPDIR=${TMPDIR/%\/} bash "$SOURCE/configure" \
 				    --target-os=linux \
 				    --arch=$ARCH \
 				    --cc="$CC" \
@@ -208,7 +209,7 @@ then
 			else
 				echo "FFMPEG_BUILD_STEP: Running configure for $RAW_ARCH"
 				set +x
-				TMPDIR=${TMPDIR/%\/} "$SOURCE/configure" \
+				TMPDIR=${TMPDIR/%\/} bash "$SOURCE/configure" \
 				    --target-os=darwin \
 				    --arch=$ARCH \
 				    --cc="$CC" \
