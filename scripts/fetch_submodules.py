@@ -2,7 +2,32 @@
 import os
 import sys
 import subprocess
-import re
+
+def fix_non_root_module_bazel(submodule_path):
+    """
+    Bazel 8 forbids `include()` directives in non-root MODULE.bazel files.
+    Comment out any `include(...)` lines in cloned submodules.
+    """
+    module_bazel = os.path.join(submodule_path, "MODULE.bazel")
+    if os.path.exists(module_bazel):
+        try:
+            with open(module_bazel, "r", encoding="utf-8", errors="ignore") as f:
+                lines = f.readlines()
+            new_lines = []
+            modified = False
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("include(") or stripped.startswith("include ("):
+                    new_lines.append(f"# [Patched for Bazel 8 non-root] {line}")
+                    modified = True
+                else:
+                    new_lines.append(line)
+            if modified:
+                with open(module_bazel, "w", encoding="utf-8") as f:
+                    f.writelines(new_lines)
+                print(f"Patched non-root include() in {module_bazel}")
+        except Exception as e:
+            print(f"Warning: Could not patch {module_bazel}: {e}")
 
 def main():
     gitmodules_path = ".gitmodules"
@@ -13,7 +38,6 @@ def main():
     with open(gitmodules_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Parse [submodule "..."] blocks
     submodules = []
     current_path = None
     current_url = None
@@ -47,10 +71,17 @@ def main():
             if res.returncode != 0:
                 print(f"Warning: Failed to clone {url} to {path}")
 
+        # Fix any Bazel 8 non-root include() error in this submodule
+        fix_non_root_module_bazel(path)
+
         # Recursively update submodules inside the cloned submodule if any
         if os.path.exists(os.path.join(path, ".gitmodules")):
             print(f"Fetching nested submodules for {path}...")
             subprocess.run(["git", "submodule", "update", "--init", "--recursive", "--depth", "1"], cwd=path)
+            # Fix nested submodules too
+            for root, dirs, files in os.walk(path):
+                if "MODULE.bazel" in files and root != ".":
+                    fix_non_root_module_bazel(root)
 
 if __name__ == "__main__":
     main()
