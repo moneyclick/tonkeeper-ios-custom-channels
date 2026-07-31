@@ -196,7 +196,15 @@ then
 				    --prefix="$THIN/$RAW_ARCH" \
 				    --pkg-config="$PKG_CONFIG" \
 				    --pkg-config-flags="--libopus_path $LIBOPUS_PATH --libvpx_path $LIBVPX_PATH --libdav1d_path $LIBDAV1D_PATH" \
-				|| (tail -n 100 ffbuild/config.log 2>/dev/null; exit 1)
+				|| {
+					echo "FFMPEG_BUILD_ERROR: configure failed for $RAW_ARCH"
+					echo "=== config.log failure summary ==="
+					grep -i -C 2 "error" ffbuild/config.log 2>/dev/null || grep -i -C 2 "error" config.log 2>/dev/null || true
+					echo "=== config.log last 40 lines ==="
+					tail -n 40 ffbuild/config.log 2>/dev/null || tail -n 40 config.log 2>/dev/null || echo "No config.log found"
+					echo "=== end config.log ==="
+					exit 1
+				}
 			else
 				echo "FFMPEG_BUILD_STEP: Running configure for $RAW_ARCH"
 				set +x
@@ -217,8 +225,10 @@ then
 				    --pkg-config-flags="--libopus_path $LIBOPUS_PATH --libvpx_path $LIBVPX_PATH --libdav1d_path $LIBDAV1D_PATH" \
 				|| {
 					echo "FFMPEG_BUILD_ERROR: configure failed for $RAW_ARCH"
-					echo "=== config.log (last 500 lines) ==="
-					tail -n 500 ffbuild/config.log 2>/dev/null || tail -n 500 config.log 2>/dev/null || echo "No config.log found"
+					echo "=== config.log failure summary ==="
+					grep -i -C 2 "error" ffbuild/config.log 2>/dev/null || grep -i -C 2 "error" config.log 2>/dev/null || true
+					echo "=== config.log last 40 lines ==="
+					tail -n 40 ffbuild/config.log 2>/dev/null || tail -n 40 config.log 2>/dev/null || echo "No config.log found"
 					echo "=== end config.log ==="
 					exit 1
 				}
