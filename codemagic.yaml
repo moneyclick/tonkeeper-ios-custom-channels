@@ -6,7 +6,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 120
     environment:
-      xcode: 26.2
+      xcode: latest
       vars:
         # Fake password for fake-codesigning (required by Make.py but not used for real signing)
         TELEGRAM_CODESIGNING_GIT_PASSWORD: "codemagic"
@@ -35,11 +35,13 @@ workflows:
 
       - name: Setup Metal Toolchain
         script: |
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer || true
           sudo xcodebuild -runFirstLaunch || true
-          xcodebuild -downloadComponent MetalToolchain || true
+          sudo xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Build Swiftgram
         script: |
+          mkdir -p "$HOME/Library/Caches/telegram-bazel-cache"
           python3 build-system/Make/Make.py \
             --overrideXcodeVersion \
             --cacheDir="$HOME/Library/Caches/telegram-bazel-cache" \
