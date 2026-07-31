@@ -88,6 +88,10 @@ genrule(
     PATH="$$PATH:$$ABS_YASM_DIR" bash $$BUILD_DIR/build-libvpx-bazel.sh $$BUILD_ARCH "$$BUILD_DIR/libvpx" "$$BUILD_DIR"
     """ +
     "\n".join([
+        "touch \"$$BUILD_DIR/VPX.framework/Headers/vpx/{}\"".format(header) for header in headers
+    ]) +
+    "\n" +
+    "\n".join([
         "cp -f \"$$BUILD_DIR/VPX.framework/Headers/vpx/{}\" \"$(location Public/vpx/{})\"".format(header, header) for header in headers
     ]) +
     "\n" +
