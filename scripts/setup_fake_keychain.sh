@@ -22,21 +22,21 @@ if [ -d "$CERTS_DIR" ]; then
   for f in "$CERTS_DIR"/*.p12; do
     if [ -f "$f" ]; then
       echo "Importing $f..."
-      security import "$f" -k "$KEYCHAIN" -P "" -A -T /usr/bin/codesign -T /usr/bin/security
+      security import "$f" -k "$KEYCHAIN" -P "" -A -T /usr/bin/codesign -T /usr/bin/security || true
     fi
   done
 
   for f in "$CERTS_DIR"/*.cer; do
     if [ -f "$f" ]; then
       echo "Importing $f..."
-      security import "$f" -k "$KEYCHAIN" -P "" -A -T /usr/bin/codesign -T /usr/bin/security
+      security import "$f" -k "$KEYCHAIN" -P "" -A -T /usr/bin/codesign -T /usr/bin/security || true
     fi
   done
 fi
 
 if [ -f "build-system/AppleWWDRCAG3.cer" ]; then
   echo "Importing AppleWWDRCAG3.cer..."
-  security import "build-system/AppleWWDRCAG3.cer" -k "$KEYCHAIN" -P "" -A -T /usr/bin/codesign -T /usr/bin/security
+  security import "build-system/AppleWWDRCAG3.cer" -k "$KEYCHAIN" -P "" -A -T /usr/bin/codesign -T /usr/bin/security || true
 fi
 
 # Allow codesign tool to access keychain without UI prompt
