@@ -14,11 +14,9 @@ workflows:
       events:
         - push
       branch_patterns:
+        - pattern: '*'
+          include: true
         - pattern: main
-          include: true
-        - pattern: master
-          include: true
-        - pattern: beta
           include: true
       cancel_previous_builds: true
     scripts:
@@ -34,6 +32,11 @@ workflows:
           echo "BUILD_NUMBER=$BUILD_NUMBER"
           # Persist for subsequent steps
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $CM_ENV
+
+      - name: Setup Metal Toolchain
+        script: |
+          sudo xcodebuild -runFirstLaunch || true
+          xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Build Swiftgram
         script: |
