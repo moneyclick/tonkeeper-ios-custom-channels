@@ -80,17 +80,13 @@ genrule(
     cp -R "$$SOURCE_PATH" "$$BUILD_DIR/"
 
     pushd "$$BUILD_DIR/libvpx"
-    patch -p1 < ../0001-Support-arm64-simulator.patch
+    patch -p1 < ../0001-Support-arm64-simulator.patch || true
     popd
 
     mkdir -p "$$BUILD_DIR/Public/libvpx"
 
     PATH="$$PATH:$$ABS_YASM_DIR" bash $$BUILD_DIR/build-libvpx-bazel.sh $$BUILD_ARCH "$$BUILD_DIR/libvpx" "$$BUILD_DIR"
     """ +
-    "\n".join([
-        "touch \"$$BUILD_DIR/VPX.framework/Headers/vpx/{}\"".format(header) for header in headers
-    ]) +
-    "\n" +
     "\n".join([
         "cp -f \"$$BUILD_DIR/VPX.framework/Headers/vpx/{}\" \"$(location Public/vpx/{})\"".format(header, header) for header in headers
     ]) +
