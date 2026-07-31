@@ -196,7 +196,7 @@ then
 				    --prefix="$THIN/$RAW_ARCH" \
 				    --pkg-config="$PKG_CONFIG" \
 				    --pkg-config-flags="--libopus_path $LIBOPUS_PATH --libvpx_path $LIBVPX_PATH --libdav1d_path $LIBDAV1D_PATH" \
-				|| exit 1
+				|| (tail -n 100 ffbuild/config.log 2>/dev/null; exit 1)
 			else
 				TMPDIR=${TMPDIR/%\/} "$SOURCE/configure" \
 				    --target-os=darwin \
@@ -213,7 +213,7 @@ then
 				    --prefix="$THIN/$RAW_ARCH" \
 				    --pkg-config="$PKG_CONFIG" \
 				    --pkg-config-flags="--libopus_path $LIBOPUS_PATH --libvpx_path $LIBVPX_PATH --libdav1d_path $LIBDAV1D_PATH" \
-				|| exit 1
+				|| (tail -n 100 ffbuild/config.log 2>/dev/null; exit 1)
 			fi
 			echo "$CONFIGURE_FLAGS" > "$CONFIGURED_MARKER"
 		fi

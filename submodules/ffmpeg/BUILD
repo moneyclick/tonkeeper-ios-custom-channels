@@ -141,6 +141,7 @@ vpx_headers = [
     "vpx_version.h",
     "vpx_ext_ratectrl.h",
     "vpx_tpl.h",
+    "vpx_config.h",
 ]
 
 vpx_libs = [
