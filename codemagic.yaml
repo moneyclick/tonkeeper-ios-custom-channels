@@ -14,6 +14,8 @@ workflows:
       events:
         - push
       branch_patterns:
+        - pattern: main
+          include: true
         - pattern: master
           include: true
         - pattern: beta
