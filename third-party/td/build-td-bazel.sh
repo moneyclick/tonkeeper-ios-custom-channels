@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 set -x
@@ -22,22 +22,19 @@ cd "$BUILD_DIR"
 # Generate source files
 mkdir native-build
 cd native-build
-cmake -DTD_GENERATE_SOURCE_FILES=ON ../td
+cmake -DTD_GENERATE_SOURCE_FILES=ON $options ../td
 NCPU=$(sysctl -n hw.logicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 cmake --build . -- -j$NCPU
 cd ..
 
 if [ "$ARCH" = "arm64" ]; then
-  IOS_PLATFORMDIR="$(xcode-select -p)/Platforms/iPhoneOS.platform"
-  IOS_SYSROOT=($IOS_PLATFORMDIR/Developer/SDKs/iPhoneOS*.sdk)
+  SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
   export CFLAGS="-arch arm64 --target=arm64-apple-ios13.0 -miphoneos-version-min=13.0 -w"
 elif [ "$ARCH" = "sim_arm64" ]; then
-  IOS_PLATFORMDIR="$(xcode-select -p)/Platforms/iPhoneSimulator.platform"
-  IOS_SYSROOT=($IOS_PLATFORMDIR/Developer/SDKs/iPhoneSimulator*.sdk)
+  SDK_PATH="$(xcrun --sdk iphonesimulator --show-sdk-path)"
   export CFLAGS="-arch arm64 --target=arm64-apple-ios13.0-simulator -miphonesimulator-version-min=13.0 -w"
 elif [ "$ARCH" = "macos_arm64" ]; then
-  IOS_PLATFORMDIR="$(xcode-select -p)/Platforms/MacOSX.platform"
-  IOS_SYSROOT=($IOS_PLATFORMDIR/Developer/SDKs/MacOSX*.sdk)
+  SDK_PATH="$(xcrun --sdk macosx --show-sdk-path)"
   export CFLAGS="-arch arm64 --target=arm64-apple-macosx14.0 -mmacosx-version-min=14.0 -w"
 else
   echo "Unsupported architecture $ARCH"
@@ -54,5 +51,6 @@ echo "set(CMAKE_SYSTEM_NAME Darwin)" >> toolchain.cmake
 echo "set(CMAKE_SYSTEM_PROCESSOR aarch64)" >> toolchain.cmake
 echo "set(CMAKE_C_COMPILER $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang)" >> toolchain.cmake
 
-cmake -G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_OSX_SYSROOT=${IOS_SYSROOT[0]} ../td $options
+cmake -G"Unix Makefiles" -DCMAKE_TOOLCHAIN_FILE=toolchain.cmake -DCMAKE_OSX_SYSROOT="$SDK_PATH" ../td $options
 make tde2e tdutils -j$NCPU
+
