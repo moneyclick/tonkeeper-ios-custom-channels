@@ -24,7 +24,7 @@ workflows:
     scripts:
       - name: Checkout submodules
         script: |
-          git submodule update --init --recursive --depth=1
+          python3 scripts/fetch_submodules.py
 
       - name: Calculate build number
         script: |
