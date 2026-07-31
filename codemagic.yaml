@@ -39,6 +39,10 @@ workflows:
           sudo xcodebuild -runFirstLaunch || true
           sudo xcodebuild -downloadComponent MetalToolchain || true
 
+      - name: Setup Fake Codesigning Keychain
+        script: |
+          bash scripts/setup_fake_keychain.sh
+
       - name: Build Swiftgram
         script: |
           mkdir -p "$HOME/Library/Caches/telegram-bazel-cache"
