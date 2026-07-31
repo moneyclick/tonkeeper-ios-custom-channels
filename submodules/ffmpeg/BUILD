@@ -161,6 +161,7 @@ opus_libs = [
 ]
 
 dav1d_headers = [
+    "vcs_version.h",
     "compat/msvc/stdatomic.h",
     "compat/gcc/stdatomic.h",
     "compat/getopt.h",

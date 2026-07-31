@@ -67,7 +67,7 @@ elif [ "$PRIMARY_ACTION" == "--cflags" ] || [ "$PRIMARY_ACTION" == "--cflags-onl
 		echo "-I$LIBVPX_PATH/include"
 		exit 0
 	elif [ "$NAME" == "dav1d" ]; then
-		echo "-I$LIBDAV1D_PATH/include"
+		echo "-I$LIBDAV1D_PATH/include -I$LIBDAV1D_PATH/include/dav1d"
 		exit 0
 	else
 		exit 1
