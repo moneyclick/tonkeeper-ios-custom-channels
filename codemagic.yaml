@@ -54,6 +54,7 @@ workflows:
             --codesigningInformationPath="build-system/fake-codesigning" \
             --buildNumber="$BUILD_NUMBER" \
             --configuration=release_arm64 \
+            --bazelFlags="--noshow_progress" \
             --outputBuildArtifactsPath="build/artifacts"
     artifacts:
       - build/artifacts/Swiftgram.ipa
