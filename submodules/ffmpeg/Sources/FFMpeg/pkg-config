@@ -9,7 +9,9 @@ LIBOPUS_PATH=""
 LIBVPX_PATH=""
 LIBDAV1D_PATH=""
 
-POSITIONAL=()
+ACTIONS=()
+NAME=""
+
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		--libopus_path)
@@ -24,38 +26,37 @@ while [[ $# -gt 0 ]]; do
 			LIBDAV1D_PATH="$2"
 			shift 2
 			;;
+		--version)
+			echo "0.29.2"
+			exit 0
+			;;
+		--exists|--cflags|--cflags-only-I|--cflags-only-other|--libs|--libs-only-L|--libs-only-l|--libs-only-other|--modversion|--variable=*)
+			ACTIONS+=("$1")
+			shift
+			;;
+		--static|--print-errors|--silence-errors|--errors-to-stdout|--short-errors)
+			# Ignored flags
+			shift
+			;;
 		*)
-			POSITIONAL+=("$1")
+			if [[ "$1" != --* ]]; then
+				NAME=$(strip_version "$1")
+			fi
 			shift
 			;;
 	esac
 done
 
-set -- "${POSITIONAL[@]}"
+PRIMARY_ACTION="${ACTIONS[0]:---exists}"
 
-if [ "$1" == "--version" ]; then
-	echo "0.29.2"
-	exit 0
-fi
-
-ACTION="$1"
-shift
-
-NAME=""
-for arg in "$@"; do
-	if [[ "$arg" != --* ]]; then
-		NAME=$(strip_version "$arg")
-	fi
-done
-
-if [ "$ACTION" == "--exists" ]; then
+if [ "$PRIMARY_ACTION" == "--exists" ]; then
 	if [ "$NAME" == "zlib" ] || [ "$NAME" == "opus" ] || [ "$NAME" == "vpx" ] || [ "$NAME" == "dav1d" ]; then
 		exit 0
 	else
 		echo "Package $NAME was not found."
 		exit 1
 	fi
-elif [ "$ACTION" == "--cflags" ]; then
+elif [ "$PRIMARY_ACTION" == "--cflags" ] || [ "$PRIMARY_ACTION" == "--cflags-only-I" ]; then
 	if [ "$NAME" == "zlib" ]; then
 		echo ""
 		exit 0
@@ -71,7 +72,10 @@ elif [ "$ACTION" == "--cflags" ]; then
 	else
 		exit 1
 	fi
-elif [ "$ACTION" == "--libs" ]; then
+elif [ "$PRIMARY_ACTION" == "--cflags-only-other" ]; then
+	echo ""
+	exit 0
+elif [ "$PRIMARY_ACTION" == "--libs" ] || [ "$PRIMARY_ACTION" == "--libs-only-L" ] || [ "$PRIMARY_ACTION" == "--libs-only-l" ]; then
 	if [ "$NAME" == "zlib" ]; then
 		echo "-lz"
 		exit 0
@@ -87,8 +91,11 @@ elif [ "$ACTION" == "--libs" ]; then
 	else
 		exit 1
 	fi
-elif [[ "$ACTION" == --variable=* ]]; then
-	VAR="${ACTION#--variable=}"
+elif [ "$PRIMARY_ACTION" == "--libs-only-other" ]; then
+	echo ""
+	exit 0
+elif [[ "$PRIMARY_ACTION" == --variable=* ]]; then
+	VAR="${PRIMARY_ACTION#--variable=}"
 	if [ "$VAR" == "includedir" ]; then
 		if [ "$NAME" == "opus" ]; then
 			echo "$LIBOPUS_PATH/include"
@@ -106,7 +113,7 @@ elif [[ "$ACTION" == --variable=* ]]; then
 	fi
 	echo ""
 	exit 0
-elif [ "$ACTION" == "--modversion" ]; then
+elif [ "$PRIMARY_ACTION" == "--modversion" ]; then
 	echo "1.0.0"
 	exit 0
 else
