@@ -198,6 +198,8 @@ then
 				    --pkg-config-flags="--libopus_path $LIBOPUS_PATH --libvpx_path $LIBVPX_PATH --libdav1d_path $LIBDAV1D_PATH" \
 				|| (tail -n 100 ffbuild/config.log 2>/dev/null; exit 1)
 			else
+				echo "FFMPEG_BUILD_STEP: Running configure for $RAW_ARCH"
+				set +x
 				TMPDIR=${TMPDIR/%\/} "$SOURCE/configure" \
 				    --target-os=darwin \
 				    --arch=$ARCH \
@@ -213,13 +215,26 @@ then
 				    --prefix="$THIN/$RAW_ARCH" \
 				    --pkg-config="$PKG_CONFIG" \
 				    --pkg-config-flags="--libopus_path $LIBOPUS_PATH --libvpx_path $LIBVPX_PATH --libdav1d_path $LIBDAV1D_PATH" \
-				|| (tail -n 200 ffbuild/config.log 2>/dev/null || tail -n 200 config.log 2>/dev/null; exit 1)
+				|| {
+					echo "FFMPEG_BUILD_ERROR: configure failed for $RAW_ARCH"
+					echo "=== config.log (last 500 lines) ==="
+					tail -n 500 ffbuild/config.log 2>/dev/null || tail -n 500 config.log 2>/dev/null || echo "No config.log found"
+					echo "=== end config.log ==="
+					exit 1
+				}
 			fi
+			set -x
 			echo "$CONFIGURE_FLAGS" > "$CONFIGURED_MARKER"
 		fi
 
+		echo "FFMPEG_BUILD_STEP: Starting make for $RAW_ARCH"
+		set +x
 		CORE_COUNT=$(nproc 2>/dev/null || PATH="$PATH:/usr/sbin" sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
-		make -j$CORE_COUNT install $EXPORT || exit 1
+		make -j$CORE_COUNT install $EXPORT || {
+			echo "FFMPEG_BUILD_ERROR: make failed for $RAW_ARCH"
+			exit 1
+		}
+		set -x
 
 		popd
 	done
