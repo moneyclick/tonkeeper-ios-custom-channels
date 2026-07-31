@@ -48,7 +48,6 @@ workflows:
           mkdir -p "$HOME/Library/Caches/telegram-bazel-cache"
           python3 build-system/Make/Make.py \
             --overrideXcodeVersion \
-            --bazelArguments="--noshow_progress" \
             --cacheDir="$HOME/Library/Caches/telegram-bazel-cache" \
             build \
             --configurationPath="build-system/codemagic-configuration.json" \

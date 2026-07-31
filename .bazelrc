@@ -1,4 +1,6 @@
 build --action_env=ZERO_AR_DATE=1
+build --noshow_progress
+build --noshow_loading_progress
 
 build --enable_platform_specific_config
 
