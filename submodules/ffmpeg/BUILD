@@ -201,7 +201,7 @@ genrule(
     ],
     cmd_bash =
     """
-        set -x
+        set -ex
 
         ABS_RULEDIR="$$(pwd)/$(RULEDIR)"
         echo "ABS_RULEDIR=$$ABS_RULEDIR"

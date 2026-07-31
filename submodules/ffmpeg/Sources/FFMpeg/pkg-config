@@ -1,60 +1,61 @@
 #!/bin/bash
 
 # Strip version qualifiers (e.g. "dav1d >= 0.5.0" -> "dav1d")
-# FFmpeg's configure passes these to pkg-config
 strip_version() {
 	echo "$@" | sed 's/ *[><=!].*//'
 }
 
+LIBOPUS_PATH=""
+LIBVPX_PATH=""
+LIBDAV1D_PATH=""
+
+POSITIONAL=()
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--libopus_path)
+			LIBOPUS_PATH="$2"
+			shift 2
+			;;
+		--libvpx_path)
+			LIBVPX_PATH="$2"
+			shift 2
+			;;
+		--libdav1d_path)
+			LIBDAV1D_PATH="$2"
+			shift 2
+			;;
+		*)
+			POSITIONAL+=("$1")
+			shift
+			;;
+	esac
+done
+
+set -- "${POSITIONAL[@]}"
+
 if [ "$1" == "--version" ]; then
 	echo "0.29.2"
 	exit 0
-elif [ "$1" == "--exists" ]; then
-	NAME="$2"
-	PRINT_ERRORS="0"
-	if [ "$NAME" == "--print-errors" ]; then
-		NAME=$(strip_version "$3")
-		PRINT_ERRORS="1"
-	else
-		NAME=$(strip_version "$2")
+fi
+
+ACTION="$1"
+shift
+
+NAME=""
+for arg in "$@"; do
+	if [[ "$arg" != --* ]]; then
+		NAME=$(strip_version "$arg")
 	fi
-	if [ "$NAME" == "zlib" ]; then
-		exit 0
-	elif [ "$NAME" == "opus" ]; then
-		exit 0
-	elif [ "$NAME" == "vpx" ]; then
-		exit 0
-	elif [ "$NAME" == "dav1d" ]; then
+done
+
+if [ "$ACTION" == "--exists" ]; then
+	if [ "$NAME" == "zlib" ] || [ "$NAME" == "opus" ] || [ "$NAME" == "vpx" ] || [ "$NAME" == "dav1d" ]; then
 		exit 0
 	else
-		if [ "PRINT_ERRORS" == "1" ]; then
-			echo "Package $NAME was not found in the pkg-config search path."
-			echo "Perhaps you should add the directory containing \`$NAME.pc'"
-			echo "to the PKG_CONFIG_PATH environment variable"
-		fi
+		echo "Package $NAME was not found."
 		exit 1
 	fi
-elif [ "$1" == "--cflags" ]; then
-	NAME="$2"
-	LIBOPUS_PATH=""
-	LIBVPX_PATH=""
-	LIBDAV1D_PATH=""
-	if [ "$2" == "--libopus_path" ]; then
-		LIBOPUS_PATH="$3"
-		NAME="$8"
-	else
-		exit 1
-	fi
-	if [ "$4" == "--libvpx_path" ]; then
-		LIBVPX_PATH="$5"
-	else
-		exit 1
-	fi
-	if [ "$6" == "--libdav1d_path" ]; then
-		LIBDAV1D_PATH="$7"
-	else
-		exit 1
-	fi
+elif [ "$ACTION" == "--cflags" ]; then
 	if [ "$NAME" == "zlib" ]; then
 		echo ""
 		exit 0
@@ -70,27 +71,7 @@ elif [ "$1" == "--cflags" ]; then
 	else
 		exit 1
 	fi
-elif [ "$1" == "--libs" ]; then
-	NAME="$2"
-	LIBOPUS_PATH=""
-	LIBVPX_PATH=""
-	LIBDAV1D_PATH=""
-	if [ "$2" == "--libopus_path" ]; then
-		LIBOPUS_PATH="$3"
-		NAME="$8"
-	else
-		exit 1
-	fi
-	if [ "$4" == "--libvpx_path" ]; then
-		LIBVPX_PATH="$5"
-	else
-		exit 1
-	fi
-	if [ "$6" == "--libdav1d_path" ]; then
-		LIBDAV1D_PATH="$7"
-	else
-		exit 1
-	fi
+elif [ "$ACTION" == "--libs" ]; then
 	if [ "$NAME" == "zlib" ]; then
 		echo "-lz"
 		exit 0
@@ -106,24 +87,8 @@ elif [ "$1" == "--libs" ]; then
 	else
 		exit 1
 	fi
-elif [[ "$1" == --variable=* ]]; then
-	# Handle --variable=includedir etc.
-	LIBOPUS_PATH=""
-	LIBVPX_PATH=""
-	LIBDAV1D_PATH=""
-	# Parse the library path flags to find NAME (last arg)
-	ARGS=("$@")
-	NAME="${ARGS[-1]}"
-	for ((i=1; i<${#ARGS[@]}-1; i++)); do
-		if [ "${ARGS[$i]}" == "--libopus_path" ]; then
-			LIBOPUS_PATH="${ARGS[$((i+1))]}"
-		elif [ "${ARGS[$i]}" == "--libvpx_path" ]; then
-			LIBVPX_PATH="${ARGS[$((i+1))]}"
-		elif [ "${ARGS[$i]}" == "--libdav1d_path" ]; then
-			LIBDAV1D_PATH="${ARGS[$((i+1))]}"
-		fi
-	done
-	VAR="${1#--variable=}"
+elif [[ "$ACTION" == --variable=* ]]; then
+	VAR="${ACTION#--variable=}"
 	if [ "$VAR" == "includedir" ]; then
 		if [ "$NAME" == "opus" ]; then
 			echo "$LIBOPUS_PATH/include"
@@ -139,9 +104,15 @@ elif [[ "$1" == --variable=* ]]; then
 			exit 0
 		fi
 	fi
-	# Return empty string for unhandled variables (non-fatal)
 	echo ""
 	exit 0
+elif [ "$ACTION" == "--modversion" ]; then
+	echo "1.0.0"
+	exit 0
 else
-	exit 1
+	if [ "$NAME" == "zlib" ] || [ "$NAME" == "opus" ] || [ "$NAME" == "vpx" ] || [ "$NAME" == "dav1d" ]; then
+		exit 0
+	else
+		exit 1
+	fi
 fi
