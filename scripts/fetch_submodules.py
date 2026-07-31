@@ -2,6 +2,7 @@
 import os
 import sys
 import subprocess
+import shutil
 
 def fix_non_root_module_bazel(submodule_path):
     """
@@ -59,14 +60,26 @@ def main():
 
     print(f"Found {len(submodules)} submodules in .gitmodules")
 
+    # Specific branches/tags required for patches to apply cleanly
+    submodule_extra_args = {
+        "third-party/libvpx/libvpx": ["--branch", "v1.12.0"],
+    }
+
     for path, url in submodules:
         print(f"\n--- Processing submodule: {path} ---")
+        extra_args = submodule_extra_args.get(path, [])
+
+        # If directory exists but was cloned with wrong branch/commit (e.g., libvpx), re-clone
+        if path == "third-party/libvpx/libvpx" and os.path.exists(path):
+            print(f"Cleaning {path} to ensure tag v1.12.0 is used...")
+            shutil.rmtree(path, ignore_errors=True)
+
         if os.path.exists(path) and os.listdir(path):
             print(f"Directory {path} already exists and is not empty. Skipping clone.")
         else:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             print(f"Cloning {url} -> {path}...")
-            cmd = ["git", "clone", "--depth", "1", url, path]
+            cmd = ["git", "clone", "--depth", "1"] + extra_args + [url, path]
             res = subprocess.run(cmd)
             if res.returncode != 0:
                 print(f"Warning: Failed to clone {url} to {path}")
