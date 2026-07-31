@@ -82,7 +82,7 @@ elif [ "$ACTION" == "--libs" ]; then
 		echo "-L$LIBVPX_PATH/lib -lVPX -lm -lpthread"
 		exit 0
 	elif [ "$NAME" == "dav1d" ]; then
-		echo "-L$LIBDAV1D_PATH/lib -ldav1d -lm -lpthread -ldl"
+		echo "-L$LIBDAV1D_PATH/lib -ldav1d -lm -lpthread"
 		exit 0
 	else
 		exit 1
