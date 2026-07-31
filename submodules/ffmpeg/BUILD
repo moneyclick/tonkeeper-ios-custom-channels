@@ -210,6 +210,7 @@ genrule(
         rm -rf "$$SOURCE_PATH"
 
         cp -R "submodules/ffmpeg/Sources/FFMpeg" "$$SOURCE_PATH"
+        chmod +x "$$SOURCE_PATH/build-ffmpeg-bazel.sh" "$$SOURCE_PATH/pkg-config" "$$SOURCE_PATH/gas-preprocessor.pl"
 
         mkdir "$$SOURCE_PATH/libvpx"
         mkdir -p "$$SOURCE_PATH/libvpx/include/vpx"
@@ -283,7 +284,7 @@ genrule(
             echo "Unsupported architecture $(TARGET_CPU)"
         fi
 
-        "$$SOURCE_PATH/build-ffmpeg-bazel.sh" "$$VARIANT" "$$BUILD_ARCH" "$$BUILD_DIR" "$$SOURCE_PATH" "$$FFMPEG_VERSION"
+        bash "$$SOURCE_PATH/build-ffmpeg-bazel.sh" "$$VARIANT" "$$BUILD_ARCH" "$$BUILD_DIR" "$$SOURCE_PATH" "$$FFMPEG_VERSION"
 
         mkdir -p "$$ABS_RULEDIR/Public/third_party/ffmpeg/libavutil"
         mkdir -p "$$ABS_RULEDIR/Public/third_party/ffmpeg/libavcodec"
